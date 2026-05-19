@@ -6,6 +6,8 @@ It provides a client–server architecture for scheduling and executing parallel
 ## Table of Contents
 
 - [Overview](#overview)
+- [Quick Start Example](#quick-start-example)
+- [Architecture](#architecture)
 - [Installation](#installation)
 - [Docker Compose Example](#docker-compose-example)
 - [Documentation](#documentation)
@@ -22,6 +24,10 @@ Conduit provides a unified service for scheduling, coordinating, and executing d
 
 Users interact with Conduit through a gRPC API (typically via the `conduit` CLI) to submit, monitor, and manage transfer jobs. The system is designed to be extensible, allowing administrators to support different storage backends and transfer mechanisms through a plugin-based model.
 
+## Quick Start Example
+
+See the [Quick Start Guide](https://lanl.github.io/conduit/quick-start/)
+
 ## Architecture
 
 At a high level, Conduit consists of a logically unified control plane and a set of data transfer nodes that execute transfer work in parallel.
@@ -30,11 +36,11 @@ At a high level, Conduit consists of a logically unified control plane and a set
 
 The Conduit server coordinates transfer jobs and maintains shared system state, while transfer execution is performed on data transfer nodes running `conduit-runner` and `conduit-fta`. Supporting services provide distributed coordination and durable storage for finalized transfer records.
 
-For a more detailed breakdown of internal components and data flows, see the [architecture documentation](docs/architecture.md).
+For a more detailed breakdown of internal components and data flows, see the [architecture documentation](https://lanl.github.io/conduit/architecture).
 
 ## Installation
 
-See the [installation documentation](docs/installation.md)
+See the [installation documentation](https://lanl.github.io/conduit/installation/)
 
 ## Docker Compose Example
 
@@ -91,7 +97,7 @@ Notes:
 
 ## Documentation
 
-Detailed documentation is available in the [`docs/`](./docs) directory:
+Detailed documentation is available at [lanl.github.io/conduit](https://lanl.github.io/conduit/)
 
 ## Copyright
 
