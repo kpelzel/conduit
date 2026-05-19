@@ -1,0 +1,29 @@
+client:
+  # location of an optional client cert for use with mTLS authentication
+  cert: ""
+  # sets the maximum message size in bytes the client can receive
+  grpc-limit: 100000000
+  # location of an optional client key for use with mTLS authentication
+  key: ""
+conduit:
+  # location of the conduit server external CA cert
+  ca: ""
+  # ip address of the conduit server to connect to
+  ip: conduit-server.example.com
+  # port of the conduit server to connect to
+  port: 23456
+  # timeout for requests to the conduit server
+  request-timeout: 60s
+# enable or disable debug mode (extra verbosity)
+debug: false
+krb:
+  # directory for kerberos ticket cache. Used for searching for existing kerberos tickets
+  cache: /tmp
+  # prefix before the user's uid number in the name of the kerberos ticket cache. Used for searching for existing kerberos tickets
+  cache-prefix: krb5cc_
+  # kerberos config that includes the host of the kerberos server
+  config: /etc/krb5.conf
+  # path to a kinit script that will create a ticket for the user. This will be executed if the an existing ticket is not found
+  kinit-path: ""
+  # the service pricipal name for the conduit server. This is in the server's keytab
+  spn: conduit/conduit-server.example.com

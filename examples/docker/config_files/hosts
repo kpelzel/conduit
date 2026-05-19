@@ -1,0 +1,13 @@
+127.0.0.1       localhost
+
+192.168.20.2    kdc.example.com             kdc
+192.168.20.3    conduit-server.example.com  conduit-server 
+192.168.20.4    client.example.com          client 
+192.168.20.6    fta1.example.com            fta1 
+192.168.20.7    fta2.example.com            fta2 
+192.168.20.21   etcd-1.example.com          etcd-1
+192.168.20.22   etcd-2.example.com          etcd-2
+192.168.20.23   etcd-3.example.com          etcd-3
+192.168.20.31   rqlite-1.example.com        rqlite-1
+192.168.20.32   rqlite-2.example.com        rqlite-2
+192.168.20.33   rqlite-3.example.com        rqlite-3

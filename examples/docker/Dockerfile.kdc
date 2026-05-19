@@ -1,0 +1,49 @@
+FROM rockylinux:8
+
+ARG USERNAME="testuser"
+ARG PASSWORD="password"
+ARG ADMIN_PASSWORD="password"
+ARG DEFAULT_REALM="EXAMPLE.COM"
+ARG KDC_HOSTNAME="kdc.example.com"
+ARG ADMIN_SERVER_HOSTNAME="kdc.example.com"
+ARG DEFAULT_DOMAIN="example.com"
+ARG TICKET_LIFETIME="36000"
+ARG RENEW_LIFETIME="36000"
+ARG DEFAULT_CCACHE_NAME="FILE:\/tmp\/krb5cc_%{uid}/"
+ARG ACL_FILE="\/var\/kerberos\/krb5kdc\/kadm5.acl"
+ARG DICT_FILE="\/usr\/share\/dict\/words"
+ARG ADMIN_KEYTAB="\/var\/kerberos\/krb5kdc\/kadm5.keytab"
+ARG MASTER_KEY_TYPE="aes256-cts"
+ARG DATABASE_NAME="\/var\/kerberos\/krb5kdc\/principal"
+ARG SUPPORTED_ENCTYPES="aes256-cts:normal aes128-cts:normal arcfour-hmac:normal camellia256-cts:normal camellia128-cts:normal"
+ARG KADMIND_PORT="749"
+
+RUN dnf install -y krb5-server krb5-libs krb5-workstation
+
+RUN sed -i --regexp-extended "s/#(    default_realm = )\S+/\1$DEFAULT_REALM/" /etc/krb5.conf \
+    && sed -i --regexp-extended "s/(default_ccache_name = )\S+/\1$DEFAULT_CCACHE_NAME" /etc/krb5.conf \
+    && sed -i --regexp-extended "s/(\[realms\])/\1\n\t$DEFAULT_REALM = {\n\t\tkdc = $KDC_HOSTNAME\n\t\tadmin_server = $KDC_HOSTNAME\n\t\tdefault_domain = $DEFAULT_DOMAIN\n\t}/" /etc/krb5.conf \
+    && sed -i --regexp-extended "s/(\[domain_realm\])/\1\n\t.$DEFAULT_DOMAIN = $DEFAULT_REALM\n\t$DEFAULT_DOMAIN = $DEFAULT_REALM/" /etc/krb5.conf \
+    && echo -e "[kdc]\n\tprofile = /var/kerberos/krb5kdc/kdc.conf\n" >> /etc/krb5.conf \
+    && echo -e "[pam]\n\tdebug = false\n\tticket_lifetime = $TICKET_LIFETIME\n\trenew_lifetime = $RENEW_LIFETIME\n\tforwardable = true\n\tkrb4_convert = false\n" >> /etc/krb5.conf
+
+RUN sed -i --regexp-extended "s/(spake_preauth_kdc_challenge = \S+)/\1\n    acl_file = $ACL_FILE\n    dict_file = $DICT_FILE\n    admin_keytab = $ADMIN_KEYTAB/" /var/kerberos/krb5kdc/kdc.conf \
+    && sed -i  '/\[realms\]/q' /var/kerberos/krb5kdc/kdc.conf \
+    && sed -i --regexp-extended  "s/(\[realms\])/\1\n$DEFAULT_REALM = {\n\tmaster_key_type = $MASTER_KEY_TYPE\n\tacl_file = $ACL_FILE\n\tdict_file = $DICT_FILE\n\tadmin_keytab = $ADMIN_KEYTAB\n\tdatabase_name = $DATABASE_NAME\n\tsupported_enctypes = $SUPPORTED_ENCTYPES\n\tkadmind_port = $KADMIND_PORT\n}\n/" /var/kerberos/krb5kdc/kdc.conf
+
+RUN echo "*/admin@$DEFAULT_REALM  *" > /var/kerberos/krb5kdc/kadm5.acl 
+
+RUN kdb5_util create -s -P testing
+
+RUN kadmin.local -q "addprinc -pw $ADMIN_PASSWORD root/admin" \
+    && kadmin.local -q "addprinc -pw $PASSWORD $USERNAME" \
+    # && kadmin.local -q "addprinc -randkey host/$KDC_HOSTNAME" \
+    # && kadmin.local -q "ktadd host/$KDC_HOSTNAME" \
+    # && kadmin.local -q "addprinc -randkey host/conduit.$DEFAULT_DOMAIN" \
+    # && kadmin.local -q "ktadd host/conduit.$DEFAULT_DOMAIN" \
+    && kadmin.local -q "addprinc -randkey conduit/conduit-server.$DEFAULT_DOMAIN" \
+    && kadmin.local -q "ktadd -k /tmp/conduit.keytab conduit/conduit-server.$DEFAULT_DOMAIN"
+
+RUN mkdir -p /etc/conduit
+
+ENTRYPOINT [ "/bin/sh", "-c" , "cp /tmp/conduit.keytab /etc/conduit/keys/conduit.keytab && /usr/sbin/krb5kdc -n -P /var/run/krb5kdc.pid" ]

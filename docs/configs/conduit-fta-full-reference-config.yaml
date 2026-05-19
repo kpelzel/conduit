@@ -1,0 +1,58 @@
+auth:
+  # location of CA Cert used for internal connections to the conduit server API (ex: conduit-runner, conduit-fta, etcd, rqlite use this cert)
+  internal-ca-cert: /etc/conduit/conduit_ca.pem
+transfer:
+  # duration of time to extend the lease expiry after each interval. This is the amount of time it will take for a "lease expiration" to occur during a crash
+  expiry-advance: 5m
+  # duration of interval between each lease extension
+  expiry-interval: 30s
+# hostname, ip address, and port for the etcd nodes that this conduit instance will attempt to connect to. This will be etcd's `listen-client-urls` value. Hostname is used for mTLS certs
+etcd:
+  - hostname: ""
+    ip: 127.0.0.1
+    port: 2379
+# filesystem plugin configurations
+filesystems:
+  # an arbitrary name for the filesystem
+  default:
+    # a regex pattern used to match the provided path from the user on the FE
+    user-path: .*
+    # a regex substitution for mapping the user FE path to the equivalent FTA path
+    fta-path: $0
+    # a regex substitution for the root of the filesystem. This is used for symlink following
+    fta-root-fs-path: /
+    plugin-stages:
+      # this plugin will be used for each path during validation
+      validation: posix
+      # this plugin will be used for each source path during setup
+      setup-src: posix
+      # this plugin will be used for the destination path during setup
+      setup-dst: posix
+      # this list of plugins determines which plugin will be used for the sources. conduit-fta will use the first common plugin between the sources and destination to execute the transfer
+      transfer-src:
+        - pftool
+      # this list of plugins determines which plugin will be used for the destination. conduit-fta will use the first common plugin between the sources and destination to execute the transfer
+      transfer-dst:
+        - pftool
+      # this plugin will be used for each source path during teardown
+      teardown-src: posix
+      # this plugin will be used for the destination path during teardown
+      teardown-dst: posix
+    # any plugin specfic configs go down here
+    custom-plugin-config:
+      # the posix plugin allows for moving sources to a trash location instead of removing during teardown
+      posix-src-trash: ""
+      # the pftool plugin will kill pftool if it sees no change in file chunks after this many hours
+      pftool-no-progress-timeout-hours: 1
+fta:
+  # number of retries conduit-fta will do when trying to set values in etcd. Useful if etcd slows when overwhelmed
+  verify-retry-count: 20
+  # duration between failed etcd request retries
+  verify-sleep-duration: 5s
+plugins:
+  pftool:
+    # path to pfcp binary
+    pfcp-path: /etc/pftool/bin/pfcp
+  rsync:
+    # path to rsync binary
+    rsync-path: rsync

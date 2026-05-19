@@ -1,0 +1,19 @@
+[Unit]
+Description=conduit-runner
+Documentation=https://github.com/lanl/conduit
+After=network-online.target local-fs.target remote-fs.target time-sync.target
+Wants=network-online.target local-fs.target remote-fs.target time-sync.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/conduit-runner --config /etc/conduit/conduit-runner-config.yaml
+Restart=always
+RestartSec=10s
+KillMode=mixed
+KillSignal=SIGTERM
+# TimeoutStopSec defines the amount of time the runner will drain its transfers before being killed
+TimeoutStopSec=5h
+SendSIGKILL=yes
+
+[Install]
+WantedBy=multi-user.target

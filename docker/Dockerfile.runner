@@ -1,0 +1,68 @@
+# Copyright 2026. Triad National Security, LLC. All rights reserved.
+
+### Build Arguments (override via "--build-arg")
+ARG GOVER="1.25"
+ARG ALPINE="3.22"
+
+################################################################################
+### Stage #1:  Alpine-based Go dev env with Conduit built & installed
+################################################################################
+FROM docker.io/library/golang:${GOVER}-alpine AS conduit-runner-build
+LABEL maintainer="Kevin Pelzel <kpelzel@lanl.gov>"
+
+ARG TARGETARCH
+ARG TARGETOS
+
+ARG GOARCH="${TARGETARCH}"
+ARG GOOS="${TARGETOS}"
+WORKDIR "/conduit"
+RUN mkdir -p /conduit
+
+RUN apk add --no-cache \
+        git
+
+# Copy go.mod and go.sum first for better layer caching
+COPY go.mod go.sum ./
+RUN go mod download \
+    && go install golang.org/x/tools/go/analysis/passes/nilness/cmd/nilness@latest
+
+# Copy the rest of the source code
+COPY . .
+
+# run tests
+RUN go vet -vettool $(which nilness) ./... \
+    && go test ./...
+
+# build conduit
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    go build -o conduit-runner ./cmd/runner \
+    && cp -v conduit-runner /sbin/conduit-runner
+
+ENTRYPOINT [ "/sbin/conduit-runner" ] 
+CMD [ "-h" ]
+
+################################################################################
+### Stage #2:  Pure Alpine container (no Go) with Kraken/Layercake copied in
+###
+### This container is intended to provide a runnable kraken-layercake environment.
+### You will likely want ot pass in /config.yaml /state.json and various /tftp/** files.
+### E.g. podman run --net=host -v tftp:/tftp -v etc/kraken:/etc/kraken kraken-layercake
+###
+#################################################################################
+FROM docker.io/library/alpine:${ALPINE} AS conduit-runner
+LABEL maintainer="Kevin Pelzel <kpelzel@lanl.gov>"
+
+COPY --from=conduit-runner-build /sbin/conduit-runner /sbin/conduit-runner
+
+# RUN adduser -D -u 1433 testuser
+
+
+# add dependencies
+RUN apk add --no-cache \
+        bash \
+    && mkdir -p /etc/conduit
+
+ENTRYPOINT [ "/sbin/conduit-runner"]
+
+    
+

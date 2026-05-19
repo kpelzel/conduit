@@ -1,0 +1,99 @@
+auth:
+  # the following fields are used for generating certs for the conduit server and clients. These values will be included in the generated certs and can be used to identify the issuer of a cert. You can set these to whatever you want, but something descriptive is recommended
+  cert:
+    country: Los Alamos National Laboratory
+    locality: Los Alamos
+    organization: Los Alamos National Laboratory
+    postal-code: "87545"
+    province: NM
+  # location of CA Cert used for external connections to the conduit server API (ex: conduit-cli uses this cert)
+  external-ca-cert: /etc/conduit/conduit_external_ca.pem
+  # location of the paired key for the external CA cert. Keep this safe
+  external-ca-key: /etc/conduit/conduit_external_key.pem
+  # location of CA Cert used for internal connections to the conduit server API (ex: conduit-runner, conduit-fta, etcd, rqlite use this cert)
+  internal-ca-cert: /etc/conduit/conduit_internal_ca.pem
+  # location of the paired key for the internal CA cert. Keep this safe
+  internal-ca-key: /etc/conduit/conduit_internal_key.pem
+  # location of the kerberos keytab used for kerberos authentication with conduit-cli
+  keytab: /etc/conduit/conduit.keytab
+  # duration that a requested cert will stay valid for. These certs are generated with the conduit-cli `cert` command. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h"
+  requested-cert-lifetime: 24h
+# duration before a user will be locked out of conduit with unresolved errant transfers. See errant transfers doc. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h"
+errant-lock: 336h
+# hostname, ip address, and port for the etcd nodes that this conduit instance will attempt to connect to. This will be etcd's `listen-client-urls` value. Hostname is used for mTLS certs
+etcd:
+  - hostname: etcd.example.com
+    ip: 127.0.0.1
+    port: 2379
+ldap:
+  # a list of ldap base dn(s) that conduit will search ldap with to find a provided user
+  base-dn: []
+  # the hostname or ip of the ldap server
+  host: ""
+  # a list of ldap attributes that conduit will use to try to match to a user's kerberos id (id.UserName@domain). See ldapFilter() in ldap.go
+  krb5-attributes: []
+  # the port that conduit will use to connect to the ldap server
+  port: 389
+  # a list of ldap attributes that conduit will use to try to match to a user's uid number thats manually provided by the client. See ldapFilter() in ldap.go
+  uid-number-attributes:
+    - uidNumber
+  # a list of ldap attributes that conduit will use to try to match to a user's username that's provided by the kerberos id (id.UserName). See ldapFilter() in ldap.go
+  uname-attributes:
+    - uid
+# the resources that must be available for each specific stage of a transfer to run on the FTAs
+node-allocations:
+  setup:
+    memory: 10MB
+    nodes: 1
+  teardown:
+    memory: 10MB
+    nodes: 1
+  transfer:
+    memory: 500MB
+    nodes: 2
+  validation:
+    memory: 10MB
+    nodes: 1
+# location and limits for each node (FTA)
+nodes:
+  # an arbitrary name for the node (FTA)
+  node1:
+    # ip or hostname that the conduit-runner is listening on
+    address: 127.0.0.1
+    # port that the conduit-runner is listening on
+    port: 23457
+    # the minimum allowed memory for this node. the scheduler will refuse to schedule a job to this node if it's amount of available memory is less than this value
+    min-memory: 1GB
+    # the maximum allowed jobs for this node. the scheduler will refuse to schedule a job to this node if it's running this number of jobs (excluding validation jobs)
+    max-jobs: 4
+# hostname, ip address, and port for the rqlite nodes that this conduit instance will attempt to connect to. This will be rqlite's `http-addr` value. Hostname is used for mTLS certs
+rqlite:
+  - hostname: rqlite.example.com
+    ip: 127.0.0.1
+    port: 4001
+server:
+  # list of hostnames that the conduit server will include in it's server cert. This allows you to use the same config for multiple conduit server instances
+  hostname:
+    - conduit-server.example.com
+  # list of ip addresses that the conduit server will listen on and include in it's server cert. This allows you to use the same cert for multiple conduit server instances. If multiple IP addresses are specified, conduit will listen on 0.0.0.0
+  ip:
+    - 127.0.0.1
+  # port that the conduit server will listen on
+  port: 23456
+  # the port that http server (and websocket) will listen on. used for the conduit dashboard
+  ws-port: 8080
+  # this is the number of concurrent instances of each item that are running internally as goroutines in this specific conduit instance
+  concurrency:
+    # the number of conduit schedulers you want running internally in this conduit instance. The scheduler is in charge of sending jobs to the FTAs
+    schedulers: 1
+    # the number of conduit watchdogs you want running internally in this conduit instance. The watchdog is in charge of monitoring lease expirations and error conditions
+    watchdogs: 1
+    # the number of conduit transfer workers you want running internally in this conduit instance. transfer workers are in charge of progressing a transfer through the transfer process
+    transfer-workers: 1
+# test mode allows conduit to accept `pause` commands from the client. This should never be enabled in production
+test: false
+transfer:
+  # the duration that conduit will advance the expiry time of a transfer if its determined that it is still running
+  expiry-advance: 60s
+  # the number in bytes (or characters) that the conduit server will accept for a source. This is useful for preventing users from providing an extremely large number of sources (ex: wildcard usage in conduit-cli)
+  max-source-bytes: 4000

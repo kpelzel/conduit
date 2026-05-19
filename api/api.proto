@@ -1,0 +1,337 @@
+// Copyright 2026. Triad National Security, LLC. All rights reserved.
+
+syntax = "proto3";
+
+option go_package = "github.com/lanl/conduit/api";
+
+package conduitapi;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+
+service ConduitApi {
+    // StartTransfer takes in a TransferRequest object and is returned a TransferDetails object with the transfer id
+    rpc StartTransfer(TransferRequest) returns (TransferDetails) {} 
+    // StopTransfer takes in a conduit transfer id and is returned a TransferDetails object
+    rpc StopTransfer(TransferIds) returns (MultiTransferDetails) {}
+    // Query takes in a query string. If none is provided, it will return details for all transfers for that user
+    rpc Query(QueryOptions) returns (MultiTransferDetails) {}
+    // WatchStatus takes in a conduit transfer id. If none is provided, it will return a details stream for all transfers for that user
+    rpc WatchStatus(TransferIds) returns (stream MultiTransferDetails) {}
+    // GetCert will authenticate with kerberos and return an mTLS client cert and private key (bundled in a PEM) for that user
+    rpc GetCert(CertRequest) returns (CertResponse) {}
+    // Version returns the version info of the conduit server
+    rpc Version(google.protobuf.Empty) returns (VersionInfo) {} 
+    // PauseTransfer will pause all leases in a transfer at a certain state
+    rpc PauseTransfer(PauseRequest) returns (TransferDetails) {}
+    // ValidateTransfer takes in a TransferRequest object and is returned a TransferDetails object with the transfer id. ValidateTransfer will only run validation and will never actually transfer
+    rpc ValidateTransfer(TransferRequest) returns (TransferDetails) {} 
+    // ServerControl will shutdown the transfer workers and watchdogs in the conduit server
+    rpc ServerControl(ServerControlRequest) returns (ServerControlResponse) {} 
+    // SchedulerInfo will return information about the scheduler in conduit
+    rpc SchedulerInfo(google.protobuf.Empty) returns (SchedulerInfoResponse) {} 
+    // ErrantPaths will return a list of paths that need to be manually recovered by the user
+    rpc ErrantPaths(ErrantPathsRequest) returns (ErrantPathsResponse) {}
+    // PurgeErrantPath will remove an errant path from conduit etcd instance. Returns the paths that were removed
+    rpc PurgeErrantPath(PurgeErrantPathRequest) returns (ErrantPathsResponse) {}
+}
+
+message MultiTransferDetails {
+    map<string, TransferDetails> details = 1;   // key: transferID, value: TransferDetails
+}
+
+message VersionInfo {
+    string version = 1;
+    bool modified = 2;
+    string time = 3;
+}
+
+message TransferIds {
+    repeated string value = 1;
+    string user = 2;
+}
+
+message QueryOptions {
+    map<string, string> queryMap = 1;
+    QueryOperation queryOperation = 2;
+    string user = 3;
+}
+
+enum QueryOperation {
+    AND = 0;
+    OR = 1;
+}
+
+// Cert contains a client cert and private key in one pem byte array
+message CertResponse {
+    bytes cert = 1;
+}
+
+message CertRequest {
+    string user = 1;
+}
+
+message TransferDetails {
+    string transferID = 1;
+    Action action = 2;                          // copy or move
+    repeated string source = 3;                 // list of paths of source files/directories
+    string destination = 4;                     // path of destination file/directory
+    Leases leases = 5;           // list of all source leases that are used to track conflicts
+    string user = 6;                            // moniker of user doing the transfer
+    google.protobuf.Timestamp startTime = 7;    // start time of the transfer. Set when transfer gets to setup
+    google.protobuf.Timestamp endTime = 8;      // end time of transfer after teardown/cleanup
+    google.protobuf.Timestamp createdTime = 9;  // created time of the transfer. Set when conduit gets the request
+    TransferState state = 10;                   // current status of the transfer
+    Error error = 11;                           // error status of the transfer
+    string errorMessage = 12;                   // error status details
+    string dataTransferred = 13;                // amount of data transfered (unit changes depending on amount)
+    uint32 filesTransferred = 14;               // number of files transferred
+    uint32 filesChunks = 15;                    
+    string bandwidth = 16;                      // speed of the transfer
+    uint32 directoriesTransferred = 17;         // number of directories transferred
+    SchedulerNodes schedulerNodes = 18;         // struct of the nodes the scheduler used for each stage in the transfer process
+    bool active = 19;                           // whether the transfer is still active or not. This will determine if transfers with conflicting leases should wait
+    string comment = 20;                        // comment field. Currently only used by DWS plugin
+    TransferState pausedState = 21;             // the state to pause the transfer at (only for test mode)
+    google.protobuf.Timestamp expiry = 22;      // The expiry time of the current stage of the transfer. Used to detect crashed fta jobs
+    ArchiveState archiveState = 23;             // The current status of archiving into the SQL database
+    repeated string warnings = 24;              // a json encoded list of warnings
+    DestInfo destInfo = 25;
+    bool validationOnly = 26;                   // if true the transfer will only run validation and never transfer data
+    bytes pluginData = 27;                      // data related to fta plugins
+    string pluginStatus = 28;                   // a very basic field for updating the status of the plugin. This is not used in scheduling and is only for additional information for users 
+    uint32 priority = 29;                       // priority for scheduler
+}
+
+message TransferRequest {
+    string user = 1;                // moniker of user doing the transfer. Not required if authenticated with kerberos
+    Action action = 2;              // copy or move
+    repeated string source = 3;     // list of paths of source files/directories
+    string destination = 4;         // path of destination file/directory
+    string comment = 5;             // comment field. Currently only used by DWS plugin
+    TransferState pausedState = 6;  // the state to pause the transfer at (only for test mode)
+}
+
+message PauseRequest {
+    string transferID = 1;              // ID of the transfer you want to pause
+    TransferState pausedState = 2;      // the state to pause the transfer at (only for test mode)
+}
+
+message SchedulerNodes {
+    string validation = 1;
+    string setup = 2;
+    string transfer = 3;
+    string teardown = 4;
+}
+
+message Leases {
+    repeated string source = 1;
+    repeated string destination = 2;
+}
+
+
+message ServerControlRequest {
+    ServerControlAction action = 1;
+}
+
+message ServerControlResponse {
+    ServerState serverState = 1;
+}
+
+enum LeaseType {
+    SOURCE = 0;
+    DESTINATION = 1;
+}
+
+enum Action {
+    COPY = 0;
+    MOVE = 1;
+    RECURSIVE_COPY = 2;
+    RECURSIVE_MOVE = 3;
+}
+
+enum SchedulerCommand {
+    NONE = 0;
+    VALIDATION = 1;
+    SETUP = 2;
+    TRANSFER = 3;
+    TEARDOWN = 4;
+}
+
+enum TransferState {
+    TRANSFER_NONE = 0;                  
+    TRANSFER_ERROR = 1;                 // check error status
+    TRANSFER_ABORT = 2;
+    TRANSFER_ABORTED = 3;
+
+    TRANSFER_INIT = 10;
+    TRANSFER_INIT_COMPLETE = 11;         // set by conduit
+
+    TRANSFER_VALIDATION_READY = 12;      // set by conduit
+    TRANSFER_VALIDATION_SUBMITTED = 13;  // set by conduit
+    TRANSFER_VALIDATING = 14;            // set by fta
+    TRANSFER_VALIDATION_COMPLETE = 15;   // set by fta
+
+    TRANSFER_WAITING_FOR_LEASE = 16;     // set by conduit
+    TRANSFER_LEASE_ACQUIRED = 17;        // set by conduit
+
+    TRANSFER_SETUP_READY = 18;          // set by conduit
+    TRANSFER_SETUP_SUBMITTED = 19;      // set by conduit
+    TRANSFER_SETUP = 20;                // set by fta
+    TRANSFER_SETUP_COMPLETE = 21;       // set by fta
+
+    TRANSFER_DATA_READY = 22;           // set by conduit
+    TRANSFER_DATA_SUBMITTED = 23;       // set by conduit
+    TRANSFER_DATA_TRANSFERRING = 24;    // set by fta
+    TRANSFER_DATA_COMPLETE = 25;        // set by fta
+
+    TRANSFER_TEARDOWN_READY = 26;       // set by conduit
+    TRANSFER_TEARDOWN_SUBMITTED = 27;   // set by conduit
+    TRANSFER_TEARDOWN = 28;             // set by fta
+    TRANSFER_TEARDOWN_COMPLETE = 29;    // set by fta
+
+    TRANSFER_FINALIZED = 100;
+}
+
+enum TransferArchiveState {
+    TRANSFER_ARCHIVE_NONE = 0;
+    TRANSFER_ARCHIVE_ERROR = 1;
+    TRANSFER_ARCHIVE_INIT = 2;
+    TRANSFER_ARCHIVE_READY = 3;
+    TRANSFER_ARCHIVE_SUBMITTED = 4;     // set by conduit
+    TRANSFER_ARCHIVE = 5;               // set by fta
+    TRANSFER_ARCHIVE_COMPLETE = 6;      // set by fta
+}
+
+enum Error {
+    ERROR_NONE = 0;                     // No errors during transfer
+    ERROR_PERMISSIONS = 1;              // File permissions are invalid
+    ERROR_NETWORK = 2;                  // NOT USED
+    ERROR_AUTH = 3;                     // Kerberos authentication failed
+    ERROR_PFTOOL_FAILED = 4;            // Transfer failed during the pftool transfer
+    ERROR_LEASE_EXPIRED = 5;            // Watchdog detected that validation, setup, transfer, or teardown has become unresponsive
+    ERROR_ETCD_CONNECTION = 6;          // Failed to connect to etcd
+    ERROR_ETCD_INTERNAL = 7;            // Failed to add a user to etcd
+    ERROR_SCHEDULER = 8;                // the scheduler responded with an error
+    ERROR_SCHEDULER_CONNECTION = 9;     // An Error occurred while trying to connect to the scheduler
+    ERROR_SCHEDULER_AUTH = 10;          // NOT USED
+    ERROR_CONDUIT_INTERNAL = 11;        // Catch-all error for conduit server operations. Send error message to developers
+    ERROR_NO_TRANSFERS_FOR_USER = 12;   // No Transfers found for user
+    ERROR_RENAME_FAILED = 13;           // FTA rename failed
+    ERROR_SYMLINK_FAILED = 14;          // FTA symlink creation failed
+    ERROR_MOUNTINFO_FAILED = 15;        // Error occurred while determining the correct filesystem for a path
+    ERROR_MKDIR_FAILED = 16;            // FTA mkdir failed 
+    ERROR_LEASE_ERROR = 17;
+    ERROR_ABORTED = 18;                 // Transfer was aborted by user
+    ERROR_REMOVE_FAILED = 19;           // FTA remove failed
+    ERROR_STAT_FAILED = 20;             // FTA failed to stat a file
+    ERROR_CLEANUP_ERROR = 21;           // NOT USED 
+    ERROR_VALIDATION = 22;              // Error occurred while validating paths of a transfer
+    ERROR_DATA_CHANGED = 23;            // The data changed between stages
+    ERROR_FILE_NOT_EXIST = 24;
+    ERROR_INVALID_REGEX = 25;
+    ERROR_INVALID_CONDUIT_CONFIG = 26;
+    ERROR_INVALID_INPUT = 27;
+    ERROR_MAX_ARG_STRLEN = 28;          // Max number of arguments hit. used for cli
+    ERROR_FTA_PLUGIN_FAILED = 29;
+    ERROR_CHTIME_FAILED = 30;           // FTA trash change modified time failed
+}
+
+enum ArchiveState {
+    ARCHIVE_NONE = 0;                  
+    ARCHIVE_ERROR = 1;                  // error while archiving to db. check logs
+
+    ARCHIVE_READY = 2;                  // transfer is ready to be archived to db
+    ARCHIVE_SUBMIT = 3;                 // archive is about to be inserted into db
+    ARCHIVE_COMPLETE = 4;               // archive was successfully inserted into db
+}
+
+enum DestInfo {
+    DEST_NONE = 0;
+    DEST_NOT_EXIST = 1;
+    DEST_NOT_DIR = 2;
+    DEST_IS_DIR = 3;
+}
+
+enum KrbCacheType {
+    KRB_NONE = 0;
+    API = 1;
+    DIR = 2;
+    FILE = 3;
+    KCM = 4;
+    KEYRING = 5;
+    MEMORY = 6;
+    MSLSA = 7;
+}
+
+enum ServerState {
+    SERVER_UNKNOWN = 0;
+    SERVER_STARTING = 1;
+    SERVER_RUNNING = 2;
+    SERVER_STOPPING = 3;
+    SERVER_STOPPED = 4;
+    SERVER_ERROR = 5;
+    SERVER_DRAIN_INIT = 6;
+    SERVER_DRAINING = 7;
+}
+
+enum ServerControlAction {
+    SERVER_CONTROL_NONE = 0;
+    SERVER_CONTROL_STATUS = 1;
+    SERVER_CONTROL_STOP = 2;
+    SERVER_CONTROL_START = 3;
+    SERVER_CONTROL_DRAIN = 4;    
+}
+
+service ConduitRunnerApi {
+    rpc getNodeStatus(google.protobuf.Empty) returns (NodeStatus) {} // server sending this back to the client 
+    rpc getNodeStatusStream(google.protobuf.Empty) returns (stream NodeStatus) {} // server sending this back to the client 
+    rpc submitFTAJob(JobRequest) returns (NodeStatus) {} // client sends this to nodes
+}
+
+message NodeStatus {
+    map<string, JobInfo> jobs = 1;
+    uint64 availableMemory = 2;
+}
+
+message JobRequest {
+    SchedulerCommand cmd = 1;
+    JobType type = 2;
+    string transferID = 3; 
+    repeated string nodes = 4;
+    map<string, JobInfo> existingJobs = 5;
+}
+
+message JobInfo {
+    map<int32, bool> actions = 1;
+}
+
+enum JobType {
+    HEAD = 0;
+    ALLOCATE = 1;
+}
+
+// ==== CONDUIT Scheduler ====
+message SchedulerInfoResponse {
+    map<string, SchedulerStatus> schedulers = 1;
+}
+
+message SchedulerStatus {
+    map<string, NodeStatus> nodes = 1;
+}
+
+
+// ==== Errant Paths ====
+message ErrantPathsResponse {
+    map<string, google.protobuf.Timestamp> paths = 1; // key: <path> value: <created-timestamp>
+}
+
+message PurgeErrantPathRequest {
+    repeated string paths = 1;
+    string user = 2;
+}
+
+message ErrantPathsRequest {
+    string user = 1; 
+}

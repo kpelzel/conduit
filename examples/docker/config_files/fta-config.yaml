@@ -1,0 +1,70 @@
+auth:
+  internal-ca-cert: /etc/conduit/keys/conduit_internal_ca.pem
+transfer:
+  expiry-interval: 10s
+  expiry-advance: 60s
+etcd:
+  - ip: 192.168.20.21
+    port: 2379
+  - ip: 192.168.20.22
+    port: 2379
+  - ip: 192.168.20.23
+    port: 2379
+filesystems:
+  fs1:
+    user-path: /mnt/fs_1/.*
+    fta-root-fs-path: /mnt/fs_1/
+    fta-path: $0
+    plugin-stages:
+      validation: posix
+      setup-src: posix
+      setup-dst: posix
+      transfer-src:
+        - pftool
+        - rsync
+      transfer-dst:
+        - rsync
+      teardown-src: posix
+      teardown-dst: posix
+    custom-plugin-config:
+      posix-src-trash: ""
+  fs2:
+    user-path: /mnt/fs_2/.*
+    fta-root-fs-path: /mnt/fs_2/
+    fta-path: $0
+    plugin-stages:
+      validation: posix
+      setup-src: posix
+      setup-dst: posix
+      transfer-src:
+        - rsync
+      transfer-dst:
+        - pftool
+        - rsync
+      teardown-src: posix
+      teardown-dst: posix
+    custom-plugin-config:
+      posix-src-trash: ""
+  default:
+    user-path: .*
+    fta-root-fs-path: /
+    fta-path: $0
+    plugin-stages:
+      validation: posix
+      setup-src: posix
+      setup-dst: posix
+      transfer-src:
+        - pftool
+      transfer-dst:
+        - pftool
+      teardown-src: posix
+      teardown-dst: posix
+    custom-plugin-config:
+      posix-src-trash: ""
+fta:
+  verify-retry-count: 20
+  verify-sleep-duration: 5s
+pftool:
+  pfcp-Path: /etc/pftool/bin/pfcp
+rsync:
+  rsync-Path: rsync

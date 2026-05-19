@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conduit-python"
+version = "0.1.0"
+description = "CONDUIT python client"
+requires-python = ">=3.9"
+dependencies = [
+  "grpcio>=1.60",
+  "protobuf>=4.21",
+  "certifi>=2026.1.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

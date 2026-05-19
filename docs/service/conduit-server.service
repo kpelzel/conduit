@@ -1,0 +1,14 @@
+[Unit]
+Description=conduit-server
+Documentation=https://github.com/lanl/conduit
+After=network-online.target local-fs.target remote-fs.target time-sync.target
+Wants=network-online.target local-fs.target remote-fs.target time-sync.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/conduit-server -d
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,28 @@
+auth:
+  internal-ca-cert: /etc/conduit/keys/conduit_internal_ca.pem
+  internal-ca-key: /etc/conduit/keys/conduit_internal_key.pem
+
+server:
+  ip:
+    - 192.168.20.6
+    - 192.168.20.7
+  hostname:
+    - fta1.example.com
+    - fta2.example.com
+  port: 9000
+
+fta:
+  path: /usr/sbin/conduit-fta
+  options:
+    - "-d"
+  environment:
+    path: "/bin:/usr/bin/:/usr/local/bin/"
+    ld-library-path: "/lib/:/lib64/:/usr/local/lib"
+
+etcd:
+  - ip: 192.168.20.21
+    port: 2379
+  - ip: 192.168.20.22
+    port: 2379
+  - ip: 192.168.20.23
+    port: 2379

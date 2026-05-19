@@ -1,0 +1,4 @@
+dist/
+conduit
+*.rpm
+*.src.rpm

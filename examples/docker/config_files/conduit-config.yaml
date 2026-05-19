@@ -1,0 +1,79 @@
+auth:
+  internal-ca-Cert: /etc/conduit/keys/conduit_internal_ca.pem
+  internal-ca-Key: /etc/conduit/keys/conduit_internal_key.pem
+  external-ca-Cert: /etc/conduit/keys/conduit_external_ca.pem
+  external-ca-Key: /etc/conduit/keys/conduit_external_key.pem
+  keytab: /etc/conduit/keys/conduit.keytab
+  requested-cert-lifetime: 720h
+errant-lock: 336h
+etcd:
+  - hostname: etcd-1.example.com
+    ip: 192.168.20.21
+    port: 2379
+  - hostname: etcd-2.example.com
+    ip: 192.168.20.22
+    port: 2379
+  - hostname: etcd-3.example.com
+    ip: 192.168.20.23
+    port: 2379
+# ldap:
+#   host: 192.168.20.40
+#   port: 1389
+#   base-dn:
+#     - "dc=example,dc=com"
+#   krb5-Attributes:
+#     - "l"
+#     - "hpcKerbPrincipals"
+#   uname-Attributes:
+#     - "uid"
+#   uid-Number-Attributes:
+#     - "uidNumber"
+node-allocations:
+  validation:
+    nodes: 1
+    memory: 10MB
+  setup:
+    nodes: 1
+    memory: 10MB
+  transfer:
+    nodes: 2
+    memory: 500MB
+  teardown:
+    nodes: 1
+    memory: 10MB
+nodes:
+  fta1:
+    address: fta1.example.com
+    port: 9000
+    min-memory: 1GB
+    max-jobs: 4
+  fta2:
+    address: 192.168.20.7
+    port: 9000
+    min-memory: 1GB
+    max-jobs: 4
+rqlite:
+  - hostname: rqlite-1.example.com
+    ip: 192.168.20.31
+    port: 4001
+  - hostname: rqlite-2.example.com
+    ip: 192.168.20.32
+    port: 4001
+  - hostname: rqlite-3.example.com
+    ip: 192.168.20.33
+    port: 4001
+server:
+  hostname: conduit-server.example.com
+  ip:
+    - 192.168.20.3
+    - 172.18.0.10
+  port: 23456
+  ws-port: 8080
+  concurrency:
+    schedulers: 2
+    watchdogs: 2
+    transfer-Workers: 2
+test: false
+transfer:
+  expiry-advance: 60s
+  max-source-bytes: 4000

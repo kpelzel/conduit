@@ -1,0 +1,22 @@
+dn: dc=example,dc=com
+dc: example
+objectClass: dcObject
+objectClass: organization
+o: Example, Inc
+
+dn: ou=users,dc=example,dc=com
+ou: users
+objectClass: organizationalunit
+
+# testuser, users, example.com
+dn: cn=testuser,ou=users,dc=example,dc=com
+cn: testuser
+sn: testuser
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+userPassword:: cGFzc3dvcmQ=
+uid: testuser
+uidNumber: 1433
+gidNumber: 1433
+homeDirectory: /home/testuser
