@@ -12,8 +12,8 @@ This quick start guide will use the docker compose example found in the README. 
 
 1.  Clone the repository:
 
-            git clone https://github.com/lanl/conduit
-            cd conduit
+        git clone https://github.com/lanl/conduit
+        cd conduit
 
 2.  Navigate to `conduit/examples/docker` and run `build.sh`. This will build all the necessary docker images and setup the necessary configuration files and keys into /etc/conduit:
 
@@ -37,13 +37,13 @@ Notes:
 
 - kinit is run when the `client` container is run. If you need to get a new ticket, run any kerberos commands for `testuser`. The password is `password`
 
-       # kinit as testuser to get a kerberos ticket
-       kinit testuser
-       # enter the password for testuser which is 'password'
-       Password for testuser@example.com: password
-       # view kerberos ticket
-       klist
+        # kinit as testuser to get a kerberos ticket
+        kinit testuser
+        # enter the password for testuser which is 'password'
+        Password for testuser@example.com: password
+        # view kerberos ticket
+        klist
 
-- the destroy script can be used to cleanup all the files created by this example:
+- the destroy script can be used to cleanup all the files and containers created by this example:
 
-       conduit/conduit/examples/docker/destroy.sh
+        conduit/conduit/examples/docker/destroy.sh

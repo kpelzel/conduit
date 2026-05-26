@@ -22,7 +22,6 @@ nav:
   - Architecture: architecture.md
   - User Guide:
       - Conduit CLI: usage/conduit-cli-usage.md
-      - Advanced Queries: usage/advanced-query.md
       - Python Client: integrations/python-client.md
   - Operations Guide:
       - Full Reference Config: operations/full-reference-config.md

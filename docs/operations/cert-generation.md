@@ -1,12 +1,22 @@
-# Certificate and Key Generation
+# Generating Certificates
 
-Cert and keys can be generated using any utility thats capable of creating and signing x509 certs. Conduit has a built in cert and key generator to ease this process.
+Certificates and keys can be generated using any utility capable of creating and signing x509 certificates. Conduit includes a built-in certificate generator to simplify this process.
 
-## Conduit Security Overview
+## Security Architecture
 
-An entire conduit system is split between two separate authentication spaces, internal and external. External conduit requests are any requests that are communicating with the conduit server to interact with it from anywhere. This includes any requests using the conduit grpc api (conduit-cli for example).
+Conduit uses two separate Certificate Authorities (CAs) to secure different parts of the system:
 
-Internal conduit requests encompass any requests between the internal components of conduit (etcd, rqlite, conduit-runner, conduit-fta). A separate Certificate Authority is created for each authentication space.
+**External CA** - Secures client-to-server communication:
+
+- Client requests to the Conduit server (conduit-cli, API clients)
+- User authentication and authorization
+
+**Internal CA** - Secures internal component communication:
+
+- ETCD cluster
+- rqlite cluster
+- conduit-runner
+- conduit-fta
 
 ## Examples
 

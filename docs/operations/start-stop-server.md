@@ -1,23 +1,74 @@
-# API Control
+# Start & Stop Server
 
-A conduit instance can be fully controlled using conduit-cli. This requires the use of an admin cert/key provided to the cli. A specific conduit instance can be targeted by providing flags for the ip and port of the instance you want to control.
+This guide covers how to control the Conduit server using both the CLI and systemd.
 
-### `conduit control drain`
+## Prerequisites
 
-This will prevent an instance of conduit from progressing a transfer from the 'init' state, but will continue all other transfers with later states. This is only intended to be used if _all_ conduit instances for a particular system are in the drain state, otherwise the draining conduit instance will continue to progress new transfers that other instances have moved from the 'init' state. Due to conduit's architecture, a single conduit instance does not know when all transfers have been drained, therefore conduit will not stop draining until an admin manually stops conduit with systemctl.
+CLI control commands require an admin certificate and key. See the [Generating Certificates](cert-generation.md) guide for details.
 
-### `conduit control start`
+## CLI Control
 
-This will resume conduit from a 'draining' state.
+Use `conduit control` commands to manage server state. Target a specific instance with `--ip` and `--port` flags.
 
-# systemd Control
+### Drain Mode
 
-Conduit fully supports starting and stopping with systemd.
+Put the server in drain mode to gracefully stop accepting new transfers:
 
-### `systemctl stop conduit`
+```bash
+conduit --cert /etc/conduit/keys/conduit_admin_cert.pem \
+  --key /etc/conduit/keys/conduit_admin_key.pem \
+  control drain
+```
 
-This will tell a conduit instance to shutdown. Any waiting leases will be reverted back to "validation complete" so another conduit instance can take it. Any current running transfers will continue to run so long as the conduit runner is not killed. Any new transfer requests will be rejected while the server is stopping.
+**What happens:**
+- Stops accepting new transfers from the init state
+- Continues processing all in-progress transfers
+- Best used when draining all instances in a cluster
 
-### `systemctl start conduit`
+**Important:** Drain mode must be manually stopped with `systemctl stop conduit-server` as the server cannot detect when all transfers are complete.
 
-This will start conduit from a fully stopped state. This is not the same as `conduit control start` as that is used for resuming from a `conduit control drain`
+### Resume from Drain
+
+Resume normal operation after draining:
+
+```bash
+conduit --cert /etc/conduit/keys/conduit_admin_cert.pem \
+  --key /etc/conduit/keys/conduit_admin_key.pem \
+  control start
+```
+
+## systemd Control
+
+### Stop the Server
+
+```bash
+systemctl stop conduit-server
+```
+
+**What happens:**
+- Server begins graceful shutdown
+- Waiting leases are reverted to "validation complete" for other instances to pick up
+- In-progress transfers continue as long as runners are active
+- New transfer requests are rejected
+
+### Start the Server
+
+```bash
+systemctl start conduit-server
+```
+
+Starts the server from a fully stopped state.
+
+**Note:** This is different from `conduit control start`, which only resumes from drain mode.
+
+### Check Server Status
+
+```bash
+systemctl status conduit-server
+```
+
+### Enable Auto-start on Boot
+
+```bash
+systemctl enable conduit-server
+```

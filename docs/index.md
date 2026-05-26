@@ -1,27 +1,30 @@
 # CONDUIT
 
-CONDUIT (Capacity ON Demand User Interaction Toolset) is a user toolset that assists users in moving data between file systems efficiently and safely.
+**Capacity ON Demand User Interaction Toolset**
 
-These docs are separated into two categories, Usage and Operations. The usage docs are everything that pertains to interacting with conduit from a user perspective (cli usage, python library, etc). The Operation docs contains all the information that will assist admins in deploying and running a conduit system.
+CONDUIT is a high-performance data transfer system designed to move large datasets between file systems efficiently and safely.
 
-### Installation:
+## Getting Started
 
-- [Quick Start Guide](quick-start.md)
-- [Installation](installation.md)
-- [Full Reference Config](operations/full-reference-config.md)
+- **[Quick Start Guide](quick-start.md)** - Try Conduit with a Docker-based example environment
+- **[Installation](installation.md)** - Full installation guide for production deployments
+- **[Architecture](architecture.md)** - Understand how Conduit works
 
-### Operation Docs:
+## User Guide
 
-- [Starting and Stopping Conduit](operations/start-stop-server.md)
-- [Architecture](architecture.md)
-- [Generating Certificates](operations/cert-generation.md)
-- [Errant Paths](operations/errant-paths.md)
-- [ETCD Direct Query](operations/etcd-direct-query.md)
-- [LDAP](operations/ldap.md)
-- [Slurm Plugin](integrations/slurm-plugin.md)
+Learn how to use Conduit to transfer data:
 
-### Usage Docs:
+- **[Conduit CLI](usage/conduit-cli-usage.md)** - Command-line interface reference and examples
+- **[Python Client](integrations/python-client.md)** - Programmatic access to Conduit
 
-- [Conduit CMD Usage (cli)](usage/conduit-cli-usage.md)
-- [Advanced Queries](usage/advanced-query.md)
-- [Python Client](integrations/python-client.md)
+## Operations Guide
+
+Administrator resources for deploying and managing Conduit:
+
+- **[Full Reference Config](operations/full-reference-config.md)** - Complete configuration examples
+- **[Generating Certificates](operations/cert-generation.md)** - Set up authentication certificates
+- **[Start & Stop Server](operations/start-stop-server.md)** - Control server lifecycle
+- **[Errant Paths](operations/errant-paths.md)** - Clean up failed transfer artifacts
+- **[ETCD Direct Query](operations/etcd-direct-query.md)** - Debug with direct ETCD access
+- **[LDAP](operations/ldap.md)** - Configure LDAP integration
+- **[Slurm Plugin](integrations/slurm-plugin.md)** - Integrate with Slurm workload manager
