@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coreos/go-systemd/daemon"
 	"github.com/google/uuid"
 	"github.com/jcmturner/gokrb5/v8/keytab"
 	"github.com/jcmturner/gokrb5/v8/service"
@@ -27,6 +28,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -41,6 +43,7 @@ import (
 	"github.com/lanl/conduit/internal/server/scheduler"
 	"github.com/lanl/conduit/internal/server/transferworker"
 	"github.com/lanl/conduit/internal/server/watchdog"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var (
@@ -63,10 +66,11 @@ type ConduitServer struct {
 	id    uuid.UUID
 	sched []*scheduler.Scheduler
 
-	grpcServer *grpc.Server
-	httpServer *http.Server
-	grpcAddr   string
-	httpAddr   string
+	grpcServer   *grpc.Server
+	httpServer   *http.Server
+	healthServer *health.Server
+	grpcAddr     string
+	httpAddr     string
 
 	usersTransfers map[string]map[uuid.UUID]bool     // key: username value: map of transfer IDs
 	transfers      map[string]*proto.TransferDetails // key: TransferID value: Transfer
@@ -262,6 +266,10 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 
 	grpcServer, si := makeGRPCServer(log, cm)
 
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
+	healthpb.RegisterHealthServer(grpcServer, healthServer)
+
 	s := &ConduitServer{
 		log:            log,
 		si:             si,
@@ -279,6 +287,7 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 		tMutex:         sync.RWMutex{},
 		grpcServer:     grpcServer,
 		httpServer:     httpServer,
+		healthServer:   healthServer,
 		grpcAddr:       grpcAddr,
 		httpAddr:       httpAddr,
 		activeStreams:  make(map[uuid.UUID]map[uuid.UUID]chan bool),
@@ -444,6 +453,8 @@ func (s *ConduitServer) StartConduitServer(clearEtcd bool) error {
 		s.log.Infof("GRPC Listening on %v", grpcLis.Addr())
 		serveErr <- s.grpcServer.Serve(grpcLis)
 	}()
+
+	s.markConduitReady()
 
 	select {
 	case <-wctx.Done():
@@ -688,6 +699,7 @@ func (s *ConduitServer) pauseConduit() error {
 	state := s.serverState
 	if state == proto.ServerState_SERVER_RUNNING || state == proto.ServerState_SERVER_DRAINING {
 		s.serverState = proto.ServerState_SERVER_STOPPING
+		s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
 	} else {
 		s.ssMutex.Unlock()
 		return fmt.Errorf("cannot pause server because it is not in a running or drained state: %v", state)
@@ -776,6 +788,7 @@ func (s *ConduitServer) drainConduit() error {
 	state := s.serverState
 	if state == proto.ServerState_SERVER_RUNNING {
 		s.serverState = proto.ServerState_SERVER_DRAIN_INIT
+		s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
 	} else {
 		s.ssMutex.Unlock()
 		return fmt.Errorf("cannot drain server because it is not in a running state: %v", state)
@@ -896,6 +909,8 @@ func (s *ConduitServer) resumeConduit() error {
 	s.serverState = proto.ServerState_SERVER_RUNNING
 	s.ssMutex.Unlock()
 
+	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
 	return nil
 }
 
@@ -922,4 +937,13 @@ func (s *ConduitServer) signalHandler() {
 
 	s.log.Infof("shutting down")
 	os.Exit(0)
+}
+
+func (s *ConduitServer) markConduitReady() {
+	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
+	// systemd-only; harmless/no-op when NOTIFY_SOCKET is absent.
+	daemon.SdNotify(false, daemon.SdNotifyReady)
+
+	s.log.Infof("CONDUIT_READY grpc_addr=%s server_id=%s", s.grpcAddr, s.id)
 }

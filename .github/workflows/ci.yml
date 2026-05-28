@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Unit tests
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build Docker integration environment
+        run: |
+          cd examples/docker
+          sudo ./build.sh
+
+      - name: Run integration smoke test
+        run: |
+          cd examples/docker
+          ./ci-smoke.sh
+
+      - name: Collect compose logs
+        if: always()
+        run: |
+          cd examples/docker
+          docker compose ps
+          docker compose logs --no-color > ../../compose.log || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compose-logs
+          path: compose.log
+
+      - name: Cleanup
+        if: always()
+        run: |
+          cd examples/docker
+          docker compose down -v --remove-orphans || true
+          sudo rm -rf /etc/conduit

@@ -68,7 +68,10 @@ services:
       GRPC_GO_LOG_SEVERITY_LEVEL: info
       GRPC_GO_LOG_VERBOSITY_LEVEL: 99
     depends_on:
-      - kdc
+      kdc:
+        condition: service_started
+      conduit-server:
+        condition: service_healthy
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config_files/hosts:/etc/hosts:ro
@@ -116,6 +119,19 @@ services:
         condition: service_started
         restart: false
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "grpc_health_probe",
+          "-addr=conduit-server.example.com:23456",
+          "-tls",
+          "-tls-ca-cert=/etc/conduit/keys/conduit-external-ca.pem",
+          "-tls-server-name=conduit-server.example.com",
+        ]
+      interval: 1s
+      timeout: 5s
+      retries: 30
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config_files/hosts:/etc/hosts:ro

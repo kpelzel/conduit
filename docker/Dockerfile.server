@@ -52,11 +52,16 @@ CMD [ "-h" ]
 FROM docker.io/library/alpine:${ALPINE} AS conduit-server
 LABEL maintainer="Kevin Pelzel <kpelzel@lanl.gov>"
 
-COPY --from=conduit-build /sbin/conduit-server /sbin/conduit-server
+ARG TARGETARCH
+ARG TARGETOS
+ARG GRPC_HEALTH_PROBE_VERSION=v0.4.50
 
-# add dependencies
-RUN apk add --no-cache \
-    && mkdir -p /etc/conduit 
+RUN mkdir -p /etc/conduit 
+
+RUN wget -qO /bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-${TARGETOS}-${TARGETARCH} && \
+    chmod +x /bin/grpc_health_probe
+
+COPY --from=conduit-build /sbin/conduit-server /sbin/conduit-server
 
 ENTRYPOINT [ "/sbin/conduit-server" ]
 # CMD [ "--config", "/etc/conduit/config.yaml" ]

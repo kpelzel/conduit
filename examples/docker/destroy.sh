@@ -6,7 +6,7 @@ if [ $(id -u) -ne 0 ]; then
 	exit 1
 fi
 
-CONDUIT_PATH="/etc/conduit"
+CONDUIT_PATH="${CONDUIT_PATH:-/etc/conduit}"
 
 # get path of script
 SCRIPT_DIR=$( cd -- "$( dirname -- "$0" )" &> /dev/null && pwd )

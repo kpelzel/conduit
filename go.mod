@@ -8,6 +8,7 @@ require (
 	github.com/buger/goterm v1.0.4
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 	github.com/containerd/console v1.0.5
+	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/docker/go-units v0.5.0
 	github.com/doug-martin/goqu/v9 v9.19.0
 	github.com/fatih/color v1.19.0
