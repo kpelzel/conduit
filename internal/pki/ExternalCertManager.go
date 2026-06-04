@@ -126,37 +126,42 @@ func (cm *ExternalCertManager) WriteClientCredsToFile(certPath, keyPath, commonN
 	return nil
 }
 
-func (cm *ExternalCertManager) GetClientCreds(commonName string, expiration time.Time) ([]byte, error) {
+func (cm *ExternalCertManager) GetClientCreds(commonName string, expiration time.Time) ([]byte, *tls.Certificate, error) {
 	cm.log.Debugf("generating client cert and key for %v", commonName)
 	cert, err := GenerateClientCert(commonName, expiration)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate client cert: %v", err)
+		return nil, nil, fmt.Errorf("failed to generate client cert: %v", err)
 	}
 
 	// ed25519 is not very compatible with 3rd party clients so for external certs we'll use an ECDSA P-256 key
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate key for client cert: %v", err)
+		return nil, nil, fmt.Errorf("failed to generate key for client cert: %v", err)
 	}
 
 	signedCertBytes, err := signCert(cert, cm.caCert, cm.caPrivKey, &privKey.PublicKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign cert: %v", err)
+		return nil, nil, fmt.Errorf("failed to sign cert: %v", err)
 	}
 
 	certPEM, err := certToPEM(signedCertBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed convert cert to PEM: %v", err)
+		return nil, nil, fmt.Errorf("failed convert cert to PEM: %v", err)
 	}
 
 	privKeyPEM, err := privKeyToPEM(privKey)
 	if err != nil {
-		return nil, fmt.Errorf("error getting private key pem: %v", err)
+		return nil, nil, fmt.Errorf("error getting private key pem: %v", err)
 	}
 
 	certAndKey := append(certPEM.Bytes(), privKeyPEM.Bytes()...)
 
-	return certAndKey, nil
+	tlsCert, err := tls.X509KeyPair(certPEM.Bytes(), privKeyPEM.Bytes())
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create tls.certificate from cert and key")
+	}
+
+	return certAndKey, &tlsCert, nil
 }
 
 func (cm *ExternalCertManager) GetServerTLSCert() (*tls.Certificate, error) {

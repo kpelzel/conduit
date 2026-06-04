@@ -80,8 +80,15 @@ server:
     - 127.0.0.1
   # port that the conduit server will listen on
   port: 23456
-  # the port that http server (and websocket) will listen on. used for the conduit dashboard
-  ws-port: 8080
+  # settings for the http server. Required for the conduit dashboard
+  http:
+    enabled: false
+    # the port that http server (and websocket) will listen on
+    port: 8080
+    # a list of origins that will be allowed by the http server
+    allowed-origins:
+      - "https://conduit.example.com"
+      - "http://localhost:8080"
   # this is the number of concurrent instances of each item that are running internally as goroutines in this specific conduit instance
   concurrency:
     # the number of conduit schedulers you want running internally in this conduit instance. The scheduler is in charge of sending jobs to the FTAs
@@ -97,3 +104,17 @@ transfer:
   expiry-advance: 60s
   # the number in bytes (or characters) that the conduit server will accept for a source. This is useful for preventing users from providing an extremely large number of sources (ex: wildcard usage in conduit-cli)
   max-source-bytes: 4000
+oauth:
+  # the idp's openid-configuration endpoint used for oauth
+  discovery-url: ""
+  # the client id provided by the idp. Used for oauth token introspection. It is highly recomended to use the environment variable (CONDUIT_HTTP_AUTH_CLIENT-ID) instead of putting this in this plain text config
+  client-id: ""
+  # the client secret provided by the idp. Used for oauth token introspection. It is highly recomended to use the environment variable (CONDUIT_HTTP_AUTH_CLIENT-SECRET) instead of putting this in this plain text config
+  client-secret: ""
+  # when enabled, the oauth server will pass the provided bearer token to the idp to retrieve user information from the idp's userinfo endpoint
+  userinfo-fallback: true
+  # a list of claims that contain the the username. Conduit will use the first claim in this list that contains text
+  username-claims:
+    - "preferred_username"
+    - "username"
+    - "sub"

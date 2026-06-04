@@ -74,7 +74,6 @@ func init() {
 	RootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debugging")
 
 	RootCmd.PersistentFlags().IntP("port", "p", DefaultPort, "Port to run conduit server on")
-	RootCmd.PersistentFlags().Int("wsport", DefaultWSPort, "Port to run conduit server websocket on")
 	RootCmd.PersistentFlags().StringSliceP("ip", "i", DefaultIPNet, "IP to run conduit server on")
 	RootCmd.PersistentFlags().StringSlice("hostname", DefaultHostname, "The hostname for the conduit server. This is used for generating the tls cert")
 	RootCmd.PersistentFlags().String("keytab", DefaultKeytabLocation, "location of the krb5 keytab file for the conduit service")
@@ -90,7 +89,6 @@ func init() {
 	RootCmd.PersistentFlags().StringSliceVar(&rqliteHostnames, "rqlite-hostname", DefaultRqliteHostname, "hostname(s) of rqlite")
 
 	viper.BindPFlag(defaults.ConfigServerPortKey, RootCmd.PersistentFlags().Lookup("port"))
-	viper.BindPFlag(defaults.ConfigServerWSPortKey, RootCmd.PersistentFlags().Lookup("wsport"))
 	viper.BindPFlag(defaults.ConfigServerIPKey, RootCmd.PersistentFlags().Lookup("ip"))
 	viper.BindPFlag(defaults.ConfigServerHostnameKey, RootCmd.PersistentFlags().Lookup("hostname"))
 	viper.BindPFlag(defaults.ConfigAuthKeytabKey, RootCmd.PersistentFlags().Lookup("keytab"))

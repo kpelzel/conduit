@@ -95,11 +95,7 @@ func NewETCDManager(log *logger.ConduitLogger, tlsCert *tls.Certificate, certPoo
 		Endpoints:   etcdEndpoints,
 		DialTimeout: defaults.DefaultETCDTimeout,
 		TLS:         tlsConfig,
-		DialOptions: []grpc.DialOption{
-			grpc.WithReturnConnectionError(),
-			grpc.WithBlock(),
-			grpc.FailOnNonTempDialError(true),
-		},
+		DialOptions: []grpc.DialOption{},
 		// Logger: zLogger,
 	}
 	c, err := clientv3.New(eConfig)

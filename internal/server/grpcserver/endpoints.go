@@ -20,6 +20,8 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+var _ proto.ConduitApiServer = (*ConduitServer)(nil)
+
 // StartTransfer is the initial handle of all StartTransfer requests from the gRPC API
 func (s *ConduitServer) StartTransfer(ctx context.Context, tr *proto.TransferRequest) (*proto.TransferDetails, error) {
 	// check if server is shutting down
@@ -988,7 +990,7 @@ func (s *ConduitServer) GetCert(ctx context.Context, cr *proto.CertRequest) (*pr
 
 	expiration := viper.GetDuration(defaults.ConfigRequestedCertLifetime)
 
-	certPEM, err := s.cm.ExternalCertManager.GetClientCreds(user, time.Now().Add(expiration))
+	certPEM, _, err := s.cm.ExternalCertManager.GetClientCreds(user, time.Now().Add(expiration))
 	if err != nil {
 		err := fmt.Errorf("failed to get client credentials: %v", err)
 		s.log.Error(err)
@@ -996,4 +998,55 @@ func (s *ConduitServer) GetCert(ctx context.Context, cr *proto.CertRequest) (*pr
 	}
 
 	return &proto.CertResponse{Cert: certPEM}, nil
+}
+
+func (s *ConduitServer) TransferNotify(notifyRequest *proto.NotifyRequest, stream proto.ConduitApi_TransferNotifyServer) error {
+	requestedUser := notifyRequest.GetUser()
+	user, _, err := s.getUserFromRequest(stream.Context(), &requestedUser)
+	if err != nil {
+		err = fmt.Errorf("error getting user from request: %v", err)
+		s.log.Error(err)
+		return err
+	}
+
+	if user != "" {
+		s.log.Debugf("using user from context: %v", user)
+	}
+
+	streamID := uuid.New()
+
+	s.usMutex.Lock()
+
+	// check for each transfer id, check if there is already a key for it in the activestreams map and add it if it isn't
+	if _, ok := s.userStreams[user]; !ok {
+		streamMap := make(map[uuid.UUID]chan *proto.NotifyMessage)
+		s.userStreams[user] = streamMap
+	}
+	uChan := make(chan *proto.NotifyMessage)
+	s.userStreams[user][streamID] = uChan
+
+	s.usMutex.Unlock()
+
+	for {
+		select {
+		case nm := <-uChan:
+			err := stream.Send(nm)
+			if err != nil {
+				s.log.Errorf("failed to send notify message to grpc stream[%v]: %v", streamID, err)
+			}
+		case <-stream.Context().Done():
+			s.log.Debugf("notify stream[%v] is closed", streamID)
+
+			s.usMutex.Lock()
+
+			delete(s.userStreams[user], streamID)
+			if len(s.userStreams[user]) == 0 {
+				delete(s.userStreams, user)
+			}
+
+			s.usMutex.Unlock()
+
+			return stream.Context().Err()
+		}
+	}
 }

@@ -1,0 +1,19 @@
+pocketid.home.arpa {
+    tls internal
+
+    handle /.well-known/oauth-authorization-server {
+        respond "not found" 404
+    }
+
+    reverse_proxy 192.168.20.41:1411
+}
+
+openwebui.home.arpa {
+    tls internal
+    reverse_proxy 192.168.20.1:8080
+}
+
+mcp.home.arpa {
+    tls internal
+    reverse_proxy 192.168.20.3:3001
+}

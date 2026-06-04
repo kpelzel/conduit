@@ -79,7 +79,7 @@ var errorCmd = &cobra.Command{
 		logger.Debugf("query string: %v", qs)
 		qo := &proto.QueryOptions{
 			QueryMap:       qs,
-			QueryOperation: proto.QueryOperation_OR,
+			QueryOperation: proto.QueryOperation_QUERY_OR,
 			User:           providedUser,
 		}
 		mtd, err := client.Query(qo)

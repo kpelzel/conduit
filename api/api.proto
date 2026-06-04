@@ -35,6 +35,8 @@ service ConduitApi {
     rpc ErrantPaths(ErrantPathsRequest) returns (ErrantPathsResponse) {}
     // PurgeErrantPath will remove an errant path from conduit etcd instance. Returns the paths that were removed
     rpc PurgeErrantPath(PurgeErrantPathRequest) returns (ErrantPathsResponse) {}
+    // TransferNotify is a long running stream that will send a transferid when a new one is created for a user
+    rpc TransferNotify(NotifyRequest) returns (stream NotifyMessage) {}
 }
 
 message MultiTransferDetails {
@@ -59,8 +61,9 @@ message QueryOptions {
 }
 
 enum QueryOperation {
-    AND = 0;
-    OR = 1;
+    QUERY_NONE = 0;
+    QUERY_AND = 1;
+    QUERY_OR = 2;
 }
 
 // Cert contains a client cert and private key in one pem byte array
@@ -120,6 +123,15 @@ message TransferRequest {
 message PauseRequest {
     string transferID = 1;              // ID of the transfer you want to pause
     TransferState pausedState = 2;      // the state to pause the transfer at (only for test mode)
+}
+
+message NotifyRequest {
+    string user = 1;                // the owner of the transfers to be notified
+}
+
+message NotifyMessage {
+    string transferID = 1;
+    bool created = 2;
 }
 
 message SchedulerNodes {
