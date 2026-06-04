@@ -12,7 +12,14 @@ const (
 	// server config keys
 	ConfigServerIPKey                        = "server.ip"
 	ConfigServerPortKey                      = "server.port"
-	ConfigServerWSPortKey                    = "server.ws-port"
+	ConfigServerHTTPPortKey                  = "server.http.port"
+	ConfigServerHTTPEnabledKey               = "server.http.enabled"
+	ConfigServerHTTPAllowedOriginsKey        = "server.http.allowed-origins"
+	ConfigOAuthDiscoveryKey                  = "oauth.discovery-url"
+	ConfigOAuthclientIDKey                   = "oauth.client-id"
+	ConfigOAuthclientSecretKey               = "oauth.client-secret"
+	ConfigOAuthUserFallbackKey               = "oauth.userinfo-fallback"
+	ConfigOAuthUserClaimsKey                 = "oauth.username-claims"
 	ConfigServerHostnameKey                  = "server.hostname"
 	ConfigAuthKeytabKey                      = "auth.keytab"
 	ConfigInternalCACertKey                  = "auth.internal-ca-cert"
@@ -92,6 +99,8 @@ const (
 	DefaultCertProvince     = "NM"
 	DefaultCertLocality     = "Los Alamos"
 	DefaultCertPostalCode   = "87545"
+
+	DefaultOAuthUserFallback = true
 )
 
 // CLI default values
@@ -115,5 +124,10 @@ const (
 )
 
 var (
-	DefaultBundlePath = fmt.Sprintf("~/%s", DefaultBundleName)
+	DefaultBundlePath     = fmt.Sprintf("~/%s", DefaultBundleName)
+	DefaultUsernameClaims = []string{
+		"preferred_username",
+		"username",
+		"sub",
+	}
 )

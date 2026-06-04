@@ -18,7 +18,6 @@ import (
 
 const (
 	DefaultPort                     = 23456
-	DefaultWSPort                   = 8080
 	DefaultConfigLocation           = "/etc/conduit/"
 	ConfigName                      = "conduit-server-config"
 	ConfigType                      = "yaml"
@@ -54,6 +53,9 @@ const (
 	DefaultConcurrentWorkers    = 2
 	DefaultConcurrentWatchDogs  = 2
 	DefaultConcurrentSchedulers = 2
+
+	DefaultHTTPEnabled = false
+	DefaultHTTPPort    = 8080
 )
 
 var (
@@ -101,6 +103,11 @@ var (
 	DefaultLDAPKrb5Attributes      = []string{}
 	DefaultLDAPUnameAttributes     = []string{"uid"}
 	DefaultLDAPUIDNumberAttributes = []string{"uidNumber"}
+
+	DefaultAllowedOrigins = []string{
+		"https://conduit.example.com",
+		fmt.Sprintf("http://localhost:%d", DefaultHTTPPort),
+	}
 )
 
 func initConfig(cfgFile string) {
@@ -144,7 +151,6 @@ func initConfig(cfgFile string) {
 func createDefaultConfig() {
 	viper.SetDefault(defaults.ConfigServerIPKey, DefaultIPNet)
 	viper.SetDefault(defaults.ConfigServerPortKey, DefaultPort)
-	viper.SetDefault(defaults.ConfigServerWSPortKey, DefaultWSPort)
 	viper.SetDefault(defaults.ConfigServerHostnameKey, DefaultHostname)
 	viper.SetDefault(defaults.ConfigAuthKeytabKey, DefaultKeytabLocation)
 	viper.SetDefault(defaults.ConfigInternalCACertKey, DefaultInternalCACertLocation)
@@ -226,6 +232,16 @@ func createDefaultConfig() {
 	viper.SetDefault(defaults.ConfigConcurrentSchedulersKey, DefaultConcurrentSchedulers)
 	viper.SetDefault(defaults.ConfigConcurrentTransferWorkersKey, DefaultConcurrentWorkers)
 	viper.SetDefault(defaults.ConfigConcurrentWatchdogsKey, DefaultConcurrentWatchDogs)
+
+	viper.SetDefault(defaults.ConfigServerHTTPEnabledKey, DefaultHTTPEnabled)
+	viper.SetDefault(defaults.ConfigServerHTTPPortKey, DefaultHTTPPort)
+	viper.SetDefault(defaults.ConfigServerHTTPAllowedOriginsKey, DefaultAllowedOrigins)
+
+	viper.SetDefault(defaults.ConfigOAuthUserFallbackKey, defaults.DefaultOAuthUserFallback)
+	viper.SetDefault(defaults.ConfigOAuthUserClaimsKey, defaults.DefaultUsernameClaims)
+	viper.SetDefault(defaults.ConfigOAuthDiscoveryKey, "")
+	viper.SetDefault(defaults.ConfigOAuthclientIDKey, "")
+	viper.SetDefault(defaults.ConfigOAuthclientSecretKey, "")
 
 	err := viper.SafeWriteConfig()
 	if err != nil {

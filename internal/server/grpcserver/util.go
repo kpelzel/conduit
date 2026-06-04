@@ -35,7 +35,7 @@ func filterTransfers(qo *proto.QueryOptions, transfers map[string]*proto.Transfe
 	var finalTransfers map[string]*proto.TransferDetails
 
 	// our operation changes whether we start with them all and remove or start from nothing and add on
-	if qo.GetQueryOperation() == proto.QueryOperation_AND || len(qo.GetQueryMap()) == 0 {
+	if qo.GetQueryOperation() == proto.QueryOperation_QUERY_AND || len(qo.GetQueryMap()) == 0 {
 		finalTransfers = transfers
 	} else {
 		finalTransfers = map[string]*proto.TransferDetails{}
@@ -78,12 +78,12 @@ func filterTransfers(qo *proto.QueryOptions, transfers map[string]*proto.Transfe
 				}
 			}
 			switch qo.GetQueryOperation() {
-			case proto.QueryOperation_AND:
+			case proto.QueryOperation_QUERY_AND:
 				// in the AND operation, we remove the transfer if it didn't match this specific query regex
 				if !found {
 					delete(finalTransfers, t.GetTransferID())
 				}
-			case proto.QueryOperation_OR:
+			case proto.QueryOperation_QUERY_NONE, proto.QueryOperation_QUERY_OR:
 				// in the OR operation, we add the transfer if it did match this specific query regex
 				if found {
 					finalTransfers[t.GetTransferID()] = t

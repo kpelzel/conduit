@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	proto "github.com/lanl/conduit/api"
+	"github.com/lanl/conduit/defaults"
 	"go.etcd.io/etcd/api/v3/authpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -25,28 +26,27 @@ func (em *ETCDManager) AddRoot() {
 		}
 	}
 
-	_, err = em.client.UserGrantRole(context.TODO(), "root", "root")
+	ctx, cancel := context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+	_, err = em.client.UserGrantRole(ctx, "root", "root")
+	cancel()
 	if err != nil {
 		em.log.Fatalf("failed to add root user to root role: %v", err)
 	}
 
 	// at the time I wrote this, client.authStatus was not implemented on etcd 3.5.0-beta.4
-	// authStatus, err := em.client.AuthStatus(context.TODO())
-	// if err != nil {
-	// 	em.log.Errorf("failed to get etcd auth status: %v", err)
-	// }
-	// if authStatus.Enabled {
-	// 	em.log.Info("auth is already enabled on etcd")
-	// } else {
-	// 	_, err := em.client.AuthEnable(context.TODO())
-	// 	if err != nil {
-	// 		em.log.Fatalf("failed to enable auth on etcd: %v", err)
-	// 	}
-	// }
-
-	_, err = em.client.AuthEnable(context.TODO())
+	ctx, cancel = context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+	authStatus, err := em.client.AuthStatus(ctx)
+	cancel()
 	if err != nil {
-		em.log.Fatalf("failed to enable auth on etcd: %v", err)
+		em.log.Errorf("failed to get etcd auth status: %v", err)
+	}
+	if !authStatus.Enabled {
+		ctx, cancel := context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+		_, err := em.client.AuthEnable(ctx)
+		cancel()
+		if err != nil {
+			em.log.Fatalf("failed to enable auth on etcd: %v", err)
+		}
 	}
 }
 
@@ -56,7 +56,9 @@ func (em *ETCDManager) AddRoot() {
 func (em *ETCDManager) DoesUserExist(username string) (bool, error) {
 	// check if user is already in the list of etcd users
 	userExists := false
-	userList, err := em.client.UserList(context.TODO())
+	ctx, cancel := context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+	userList, err := em.client.UserList(ctx)
+	cancel()
 	if err != nil {
 		return false, fmt.Errorf("failed to get user list: %v", err)
 	}
@@ -76,7 +78,9 @@ func (em *ETCDManager) DoesUserExist(username string) (bool, error) {
 func (em *ETCDManager) DoesRoleExist(roleName string) (bool, error) {
 	// check if role is already in the list of etcd roles
 	roleExists := false
-	roleList, err := em.client.RoleList(context.TODO())
+	ctx, cancel := context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+	roleList, err := em.client.RoleList(ctx)
+	cancel()
 	if err != nil {
 		return false, fmt.Errorf("failed to get role list: %v", err)
 	}
@@ -109,7 +113,9 @@ func (em *ETCDManager) AddUser(username string) error {
 		noPass := &clientv3.UserAddOptions{
 			NoPassword: true,
 		}
-		_, err := em.client.UserAddWithOptions(context.TODO(), username, "", noPass)
+		ctx, cancel := context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+		_, err := em.client.UserAddWithOptions(ctx, username, "", noPass)
+		cancel()
 		if err != nil {
 			return fmt.Errorf("failed to add user: %v to etcd: %v", username, err)
 		} else {
@@ -136,7 +142,9 @@ func (em *ETCDManager) AddRole(roleName string) error {
 		// return fmt.Errorf("the etcd instance already has user: %v", username)
 	} else {
 		em.log.Debugf("sending request to add role: %v", roleName)
-		_, err = em.client.RoleAdd(context.TODO(), roleName)
+		ctx, cancel := context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+		_, err = em.client.RoleAdd(ctx, roleName)
+		cancel()
 		if err != nil {
 			return fmt.Errorf("failed to add role: %v to etcd: %v", roleName, err)
 		} else {
@@ -166,7 +174,9 @@ func (em *ETCDManager) AddTransferUser(transferID string) error {
 	}
 
 	// add user to the role
-	_, err = em.client.UserGrantRole(context.TODO(), transferID, transferID)
+	ctx, cancel := context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+	_, err = em.client.UserGrantRole(ctx, transferID, transferID)
+	cancel()
 	if err != nil {
 		return fmt.Errorf("failed to add user %v to role %v: %v", transferID, transferID, err)
 	} else {
@@ -174,7 +184,9 @@ func (em *ETCDManager) AddTransferUser(transferID string) error {
 	}
 
 	// give role permission to read/write to "transfers/<transferID>"
-	_, err = em.client.RoleGrantPermission(context.TODO(), transferID, proto.TransferPrefix+transferID, clientv3.GetPrefixRangeEnd(proto.TransferPrefix+transferID), clientv3.PermissionType(authpb.READWRITE))
+	ctx, cancel = context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+	_, err = em.client.RoleGrantPermission(ctx, transferID, proto.TransferPrefix+transferID, clientv3.GetPrefixRangeEnd(proto.TransferPrefix+transferID), clientv3.PermissionType(authpb.READWRITE))
+	cancel()
 	if err != nil {
 		return fmt.Errorf("failed to grant etcd permission to user %v: %v", transferID, err)
 	} else {

@@ -47,6 +47,8 @@ type ConduitApiClient interface {
 	ErrantPaths(ctx context.Context, in *ErrantPathsRequest, opts ...grpc.CallOption) (*ErrantPathsResponse, error)
 	// PurgeErrantPath will remove an errant path from conduit etcd instance. Returns the paths that were removed
 	PurgeErrantPath(ctx context.Context, in *PurgeErrantPathRequest, opts ...grpc.CallOption) (*ErrantPathsResponse, error)
+	// TransferNotify is a long running stream that will send a transferid when a new one is created for a user
+	TransferNotify(ctx context.Context, in *NotifyRequest, opts ...grpc.CallOption) (ConduitApi_TransferNotifyClient, error)
 }
 
 type conduitApiClient struct {
@@ -188,6 +190,38 @@ func (c *conduitApiClient) PurgeErrantPath(ctx context.Context, in *PurgeErrantP
 	return out, nil
 }
 
+func (c *conduitApiClient) TransferNotify(ctx context.Context, in *NotifyRequest, opts ...grpc.CallOption) (ConduitApi_TransferNotifyClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ConduitApi_ServiceDesc.Streams[1], "/conduitapi.ConduitApi/TransferNotify", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &conduitApiTransferNotifyClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ConduitApi_TransferNotifyClient interface {
+	Recv() (*NotifyMessage, error)
+	grpc.ClientStream
+}
+
+type conduitApiTransferNotifyClient struct {
+	grpc.ClientStream
+}
+
+func (x *conduitApiTransferNotifyClient) Recv() (*NotifyMessage, error) {
+	m := new(NotifyMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ConduitApiServer is the server API for ConduitApi service.
 // All implementations must embed UnimplementedConduitApiServer
 // for forward compatibility
@@ -216,6 +250,8 @@ type ConduitApiServer interface {
 	ErrantPaths(context.Context, *ErrantPathsRequest) (*ErrantPathsResponse, error)
 	// PurgeErrantPath will remove an errant path from conduit etcd instance. Returns the paths that were removed
 	PurgeErrantPath(context.Context, *PurgeErrantPathRequest) (*ErrantPathsResponse, error)
+	// TransferNotify is a long running stream that will send a transferid when a new one is created for a user
+	TransferNotify(*NotifyRequest, ConduitApi_TransferNotifyServer) error
 	mustEmbedUnimplementedConduitApiServer()
 }
 
@@ -258,6 +294,9 @@ func (UnimplementedConduitApiServer) ErrantPaths(context.Context, *ErrantPathsRe
 }
 func (UnimplementedConduitApiServer) PurgeErrantPath(context.Context, *PurgeErrantPathRequest) (*ErrantPathsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PurgeErrantPath not implemented")
+}
+func (UnimplementedConduitApiServer) TransferNotify(*NotifyRequest, ConduitApi_TransferNotifyServer) error {
+	return status.Errorf(codes.Unimplemented, "method TransferNotify not implemented")
 }
 func (UnimplementedConduitApiServer) mustEmbedUnimplementedConduitApiServer() {}
 
@@ -491,6 +530,27 @@ func _ConduitApi_PurgeErrantPath_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConduitApi_TransferNotify_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(NotifyRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ConduitApiServer).TransferNotify(m, &conduitApiTransferNotifyServer{stream})
+}
+
+type ConduitApi_TransferNotifyServer interface {
+	Send(*NotifyMessage) error
+	grpc.ServerStream
+}
+
+type conduitApiTransferNotifyServer struct {
+	grpc.ServerStream
+}
+
+func (x *conduitApiTransferNotifyServer) Send(m *NotifyMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // ConduitApi_ServiceDesc is the grpc.ServiceDesc for ConduitApi service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -547,6 +607,11 @@ var ConduitApi_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchStatus",
 			Handler:       _ConduitApi_WatchStatus_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "TransferNotify",
+			Handler:       _ConduitApi_TransferNotify_Handler,
 			ServerStreams: true,
 		},
 	},
