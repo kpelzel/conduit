@@ -3,12 +3,15 @@
 package util
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/lanl/conduit/defaults"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -71,4 +74,40 @@ func DoesKeyPairExist(keypairPath string) (bool, error) {
 	} else {
 		return false, fmt.Errorf("failed to check for existing keypair at [%s]: %v", keypairPath, err)
 	}
+}
+
+// GetCertPoolFromViper will first pull the cert pool from the system and then add the provided cert in the config if it exists
+func GetCertPoolFromViper(viperKey string) (*x509.CertPool, error) {
+	// Start with system cert pool
+	certPool, err := x509.SystemCertPool()
+	if err != nil {
+		// If we can't get system certs, fall back to empty pool
+		certPool = x509.NewCertPool()
+	}
+
+	// Add custom CA if provided
+	caPath := viper.GetString(viperKey)
+	if caPath != "" {
+		caCert, err := loadCAFromFile(caPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load CA cert from [%v]: %v", caPath, err)
+		}
+		certPool.AddCert(caCert)
+	}
+
+	return certPool, nil
+}
+
+func loadCAFromFile(CAPath string) (*x509.Certificate, error) {
+	certBytes, err := os.ReadFile(CAPath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading certificate from file: %v", err)
+	}
+	certBlock, _ := pem.Decode(certBytes)
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing certificate from file: %v", err)
+	}
+
+	return cert, nil
 }

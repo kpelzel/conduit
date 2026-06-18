@@ -1,0 +1,25 @@
+model_list: []
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+mcp_servers:
+  conduit_mcp:
+    url: "https://mcp.home.arpa/mcp"
+    transport: "http"
+    auth_type: oauth2
+    client_id: os.environ/MCP_CLIENT_ID
+    client_secret: os.environ/MCP_CLIENT_SECRET
+    token_url: "https://pocketid.home.arpa/api/oidc/token"
+    scopes: ["profile"]
+
+# mcp_servers:
+#   conduit_mcp:
+#     url: "http://192.168.20.163:8081/mcp"
+#     transport: "http"
+#     description: "Conduit MCP behind LiteLLM"
+#     allow_all_keys: true
+#     auth_type: "oauth2_token_exchange"
+#     oauth:
+#       client_id: "ff87c1d4-4b22-4e74-97bb-43b562f4e24c"
+#       client_secret: "OPUGpFviUJlShJV3O6yzOIDmYV6bqx29"

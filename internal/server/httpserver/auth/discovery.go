@@ -18,13 +18,13 @@ type ProviderMetadata struct {
 	UserInfoEndpoint      string `json:"userinfo_endpoint"`
 	IntrospectionEndpoint string `json:"introspection_endpoint"`
 	JWKSURI               string `json:"jwks_uri"`
+
+	TokenEndpointAuthMethodsSupported         []string `json:"token_endpoint_auth_methods_supported"`
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	IntrospectionEndpointAuthSigningAlgs      []string `json:"introspection_endpoint_auth_signing_alg_values_supported"`
 }
 
-func DiscoverProviderMetadata(
-	ctx context.Context,
-	httpClient *http.Client,
-	discoveryURL string,
-) (*ProviderMetadata, error) {
+func DiscoverProviderMetadata(ctx context.Context, httpClient *http.Client, discoveryURL string) (*ProviderMetadata, error) {
 	discoveryURL = strings.TrimSpace(discoveryURL)
 	if discoveryURL == "" {
 		return nil, errors.New("discovery URL is required")
@@ -49,11 +49,7 @@ func DiscoverProviderMetadata(
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, fmt.Errorf(
-			"discovery endpoint returned %s: %q",
-			resp.Status,
-			strings.TrimSpace(string(body)),
-		)
+		return nil, fmt.Errorf("discovery endpoint [%v] returned %s: %q", discoveryURL, resp.Status, strings.TrimSpace(string(body)))
 	}
 
 	var md ProviderMetadata

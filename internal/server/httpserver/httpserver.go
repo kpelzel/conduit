@@ -60,6 +60,7 @@ func CreateHTTPServer(
 	clientSecret := viper.GetString(defaults.ConfigOAuthclientSecretKey)
 	userInfoFallback := viper.GetBool(defaults.ConfigOAuthUserFallbackKey)
 	usernameClaims := viper.GetStringSlice(defaults.ConfigOAuthUserClaimsKey)
+	introspectionAuthMethod := viper.GetString(defaults.ConfigOAuthIntrospectionAuthMethodKey)
 
 	if discoveryURL == "" {
 		return nil, fmt.Errorf("OAuth discovery URL is required")
@@ -84,9 +85,11 @@ func CreateHTTPServer(
 
 		UseUserInfoFallback: userInfoFallback,
 
+		ViperIntrospectionAuthMethod: introspectionAuthMethod,
+
 		// does the IdP return aud?
 		// ExpectedAudience: "conduit",
-	})
+	}, log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http validator: %v", err)
 	}

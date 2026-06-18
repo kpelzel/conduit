@@ -5,8 +5,6 @@ package client
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"log"
 	"net"
@@ -100,15 +98,9 @@ func getGRPCClient(log *logrus.Logger, quiet bool, certPath string, keyPath stri
 
 	}
 
-	var certPool *x509.CertPool
-	caPath := viper.GetString(defaults.ConfigConduitCAKey)
-	if caPath != "" {
-		certPool = x509.NewCertPool()
-		caCert, err := loadCAFromFile(caPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to CA cert from [%v]: %v", caPath, err)
-		}
-		certPool.AddCert(caCert)
+	certPool, err := util.GetCertPoolFromViper(defaults.ConfigConduitCAKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get CA cert from config: %v", err)
 	}
 
 	tlsConfig := &tls.Config{
@@ -149,20 +141,6 @@ func getGRPCClient(log *logrus.Logger, quiet bool, certPath string, keyPath stri
 	client := proto.NewConduitApiClient(conn)
 
 	return client, nil
-}
-
-func loadCAFromFile(CAPath string) (*x509.Certificate, error) {
-	certBytes, err := os.ReadFile(CAPath)
-	if err != nil {
-		return nil, fmt.Errorf("error reading certificate from file: %v", err)
-	}
-	certBlock, _ := pem.Decode(certBytes)
-	cert, err := x509.ParseCertificate(certBlock.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing certificate from file: %v", err)
-	}
-
-	return cert, nil
 }
 
 // getKrbClient creates a kerberos client using the users cached kerberos ticket defined in the config

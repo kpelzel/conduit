@@ -1,0 +1,51 @@
+client:
+  # location of the client cert for use with mTLS authentication (also supports cert-key bundles)
+  cert: ""
+  # location of the client key for use with mTLS authentication (also supports cert-key bundles)
+  key: ""
+  # sets the maximum message size in bytes the client can receive
+  grpc-limit: 100000000
+conduit:
+  # location of the conduit server external CA cert
+  ca: ""
+  # ip address of the conduit server to connect to
+  ip: conduit-server.example.com
+  # port of the conduit server to connect to
+  port: 23456
+  # timeout for requests to the conduit server
+  request-timeout: 60s
+# enable or disable debug mode (extra verbosity)
+debug: false
+oauth:
+  # the client id provided by the idp. Used for oauth token introspection. It is highly recommended to use the environment variable (CONDUIT_MCP_OAUTH_CLIENT-ID) instead of putting this in this plain text config
+  client-id: ""
+  # the client secret provided by the idp. Used for oauth token introspection. It is highly recommended to use the environment variable (CONDUIT_MCP_OAUTH_CLIENT-SECRET) instead of putting this in this plain text config
+  client-secret: ""
+  # the idp's openid-configuration endpoint used for oauth
+  discovery-url: ""
+  # a list of scopes that must be present in the oauth token for the request to be authorized
+  required-scopes: []
+
+  supported-scopes: []
+  # the auth method used for token introspection. If blank, conduit will attempt to discovery the preferred auth method from the idp. Current options are client_secret_basic and client_secret_post
+  introspection-auth-method: ""
+  # fallback time-to-live duration for tokens when expiration time cannot be determined from the token. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h"
+  token-fallback-ttl: 1m0s
+  # when enabled, the oauth server will pass the provided bearer token to the idp to retrieve user information from the idp's userinfo endpoint
+  userinfo-fallback: true
+  # a list of claims that contain the username. Conduit will use the first claim in this list that contains text
+  username-claims:
+    - preferred_username
+server:
+  # the ip address that the mcp server will listen on
+  ip: 127.0.0.1
+  mcp-resource-path: /mcp
+  # the url path that the oauth protected resource metadata endpoint will listen on
+  metadata-path: /.well-known/oauth-protected-resource
+  # the port that the mcp server will listen on
+  port: 23457
+  # the public base url for the mcp server (e.g., https://mcp.example.com). If not set, the server will attempt to construct it from the request
+  public-url: ""
+  http:
+    allowed-origins:
+      - "*"

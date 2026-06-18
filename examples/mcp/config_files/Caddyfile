@@ -1,0 +1,38 @@
+pocketid.home.arpa {
+    tls internal
+
+    handle /.well-known/oauth-authorization-server {
+        respond "not found" 404
+    }
+
+    reverse_proxy 192.168.20.161:1411
+}
+
+openwebui.home.arpa {
+    tls internal
+    reverse_proxy 192.168.20.1:8080
+}
+
+mcp.home.arpa {
+    tls internal
+    reverse_proxy 192.168.20.163:8081
+}
+
+litellm.home.arpa {
+    tls internal
+    reverse_proxy 192.168.20.164:4000
+}
+
+zitadel.home.arpa {
+    tls internal
+
+    handle /ui/v2/login/* {
+        reverse_proxy 192.168.20.167:3000
+    }
+
+    handle {
+        reverse_proxy h2c://192.168.20.161:8080 {
+            header_up -TE
+        }
+    }
+}

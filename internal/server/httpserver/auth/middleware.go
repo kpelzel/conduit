@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+var (
+	ErrInsufficientScope = errors.New("insufficient scope")
+)
+
 func AuthenticateRequest(r *http.Request, v *Introspector, opts ValidateOptions) (*Principal, error) {
 	token, err := BearerTokenFromRequest(r)
 	if err != nil {

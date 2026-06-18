@@ -14,6 +14,7 @@ KillSignal=SIGTERM
 # TimeoutStopSec defines the amount of time the runner will drain its transfers before being killed
 TimeoutStopSec=5h
 SendSIGKILL=yes
+LimitNOFILE=100000000
 
 [Install]
 WantedBy=multi-user.target

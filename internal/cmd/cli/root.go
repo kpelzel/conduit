@@ -60,7 +60,7 @@ func init() {
 	RootCmd.PersistentFlags().String("key", defaults.DefaultClientKey, "The path to the mTLS client key to use for the request")
 	RootCmd.PersistentFlags().String("cert-key-bundle", defaults.DefaultBundlePath, "shorthand for setting --cert and --key to the same path")
 
-	viper.BindPFlag("debug", RootCmd.PersistentFlags().Lookup("debug"))
+	viper.BindPFlag(defaults.ConfigDebugKey, RootCmd.PersistentFlags().Lookup("debug"))
 	viper.BindPFlag(defaults.ConfigKrbConfigKey, RootCmd.PersistentFlags().Lookup("krb-config"))
 	viper.BindPFlag(defaults.ConfigKrbCacheKey, RootCmd.PersistentFlags().Lookup("krb-cache"))
 	viper.BindPFlag(defaults.ConfigKrbCachePrefixKey, RootCmd.PersistentFlags().Lookup("krb-cache-prefix"))

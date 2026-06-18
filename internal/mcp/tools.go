@@ -2,19 +2,23 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	proto "github.com/lanl/conduit/api"
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // GetTimeParams defines the parameters for the cityTime tool.
 type StartTransferParams struct {
-	Action      string   `json:"action" jsonschema:"action for the transfer"`
-	Source      []string `json:"source" jsonschema:"list of paths of source files/directories"`
-	Destination string   `json:"destination" jsonschema:"path of destination file/directory"`
+	Action      string   `json:"action" jsonschema:"transfer action. Use COPY by default unless the user explicitly asks to move or recursively copy/move. Valid values: COPY, MOVE, RECURSIVE_COPY, RECURSIVE_MOVE"`
+	Source      []string `json:"source" jsonschema:"one or more source file or directory paths"`
+	Destination string   `json:"destination" jsonschema:"destination file or directory path"`
 }
 
 type GetTransferStatusParams struct {
@@ -22,14 +26,18 @@ type GetTransferStatusParams struct {
 }
 
 type StartTransferResult struct {
-	TransferID string `json:"transfer_id" jsonschema:"ID of the transfer"`
-	Successful bool   `json:"state" jsonschema:"signifies wether the transfer was successfully submitted or not. It does not indicate that the transfer successfully completed."`
+	Submitted  bool           `json:"submitted" jsonschema:"true if the transfer request was successfully submitted to Conduit"`
+	Message    string         `json:"message" jsonschema:"human-readable summary of the transfer submission"`
+	TransferID string         `json:"transfer_id" jsonschema:"ID of the transfer"`
+	Details    map[string]any `json:"details" jsonschema:"full Conduit TransferDetails object serialized with protojson"`
 }
 
 type GetTransferStatusResult struct {
-	TransferID string `json:"transfer_id" jsonschema:"ID of the transfer"`
-	State      string `json:"state" jsonschema:"current state of the transfer"`
-	Active     bool   `json:"active" jsonschema:"whether the transfer is still active or not"`
+	Message    string         `json:"message" jsonschema:"human-readable transfer status summary"`
+	TransferID string         `json:"transfer_id" jsonschema:"ID of the transfer"`
+	State      string         `json:"state" jsonschema:"current transfer state"`
+	Active     bool           `json:"active" jsonschema:"whether the transfer is still active"`
+	Details    map[string]any `json:"details" jsonschema:"full Conduit TransferDetails object serialized with protojson"`
 }
 
 func (m *MCPServer) registerTools() error {
@@ -54,7 +62,7 @@ func (m *MCPServer) registerTools() error {
 
 	mcpsdk.AddTool(m.mcpServer, &mcpsdk.Tool{
 		Name:         "start_transfer",
-		Description:  "Start a new data transfer from a SOURCE to a DESTINATION. Returns transfer_id. After a successful call, immediately call get_transfer_status with the returned transfer_id to verify the initial state.",
+		Description:  "Start a Conduit file transfer. Use this when the user asks to copy, move, or transfer files or directories. On success, this tool has already submitted the transfer to Conduit and returns a transfer_id. The assistant should tell the user the transfer was submitted successfully and include the transfer_id. If the user did not specify an action, use COPY.",
 		InputSchema:  startParamsSchema,
 		OutputSchema: startResultSchema,
 	}, m.startTransfer)
@@ -132,10 +140,35 @@ func (m *MCPServer) startTransfer(ctx context.Context, req *mcpsdk.CallToolReque
 		return nil, nil, fmt.Errorf("failed to start transfer: %w", err)
 	}
 
-	return nil, &StartTransferResult{
-		TransferID: resp.GetTransferID(),
-		Successful: true,
-	}, nil
+	details, err := transferDetailsMap(resp)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal transfer details: %w", err)
+	}
+
+	transferID := resp.GetTransferID()
+
+	message := fmt.Sprintf(
+		"Transfer submitted successfully. transfer_id=%s action=%s source=%v destination=%s state=%s active=%t.",
+		transferID,
+		resp.GetAction().String(),
+		resp.GetSource(),
+		resp.GetDestination(),
+		resp.GetState().String(),
+		resp.GetActive(),
+	)
+
+	out := &StartTransferResult{
+		Submitted:  true,
+		Message:    message,
+		TransferID: transferID,
+		Details:    details,
+	}
+
+	return &mcpsdk.CallToolResult{
+		Content: []mcpsdk.Content{
+			&mcpsdk.TextContent{Text: message},
+		},
+	}, out, nil
 }
 
 func (m *MCPServer) getTransferStatus(ctx context.Context, req *mcpsdk.CallToolRequest, params *GetTransferStatusParams) (*mcpsdk.CallToolResult, *GetTransferStatusResult, error) {
@@ -160,9 +193,87 @@ func (m *MCPServer) getTransferStatus(ctx context.Context, req *mcpsdk.CallToolR
 		return nil, nil, fmt.Errorf("transfer not found: %s", params.TransferID)
 	}
 
-	return nil, &GetTransferStatusResult{
-		TransferID: params.TransferID,
-		State:      details.GetState().String(),
-		Active:     details.GetActive(),
-	}, nil
+	detailsJSON, err := transferDetailsMap(details)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal transfer details: %w", err)
+	}
+
+	message := fmt.Sprintf(
+		"Transfer %s status: state=%s active=%t error=%s error_message=%q.",
+		params.TransferID,
+		details.GetState().String(),
+		details.GetActive(),
+		details.GetError().String(),
+		details.GetErrorMessage(),
+	)
+
+	return &mcpsdk.CallToolResult{
+			Content: []mcpsdk.Content{
+				&mcpsdk.TextContent{Text: message},
+			},
+		}, &GetTransferStatusResult{
+			Message:    message,
+			TransferID: params.TransferID,
+			State:      details.GetState().String(),
+			Active:     details.GetActive(),
+			Details:    detailsJSON,
+		}, nil
+}
+
+// createLoggingMiddleware creates an MCP middleware that logs method calls.
+func (m *MCPServer) createLoggingMiddleware() mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(
+			ctx context.Context,
+			method string,
+			req mcp.Request,
+		) (mcp.Result, error) {
+			start := time.Now()
+			sessionID := req.GetSession().ID()
+
+			// Log request details.
+			m.log.Debugf("[REQUEST] Session: %s | Method: %s",
+				sessionID,
+				method)
+
+			// Call the actual handler.
+			result, err := next(ctx, method, req)
+
+			// Log response details.
+			duration := time.Since(start)
+
+			if err != nil {
+				m.log.Errorf("[RESPONSE] Session: %s | Method: %s | Status: ERROR | Duration: %v | Error: %v",
+					sessionID,
+					method,
+					duration,
+					err)
+			} else {
+				m.log.Debugf("[RESPONSE] Session: %s | Method: %s | Status: OK | Duration: %v",
+					sessionID,
+					method,
+					duration)
+			}
+
+			return result, err
+		}
+	}
+}
+
+func transferDetailsMap(td *proto.TransferDetails) (map[string]any, error) {
+	b, err := protojson.MarshalOptions{
+		UseEnumNumbers:  false,
+		EmitUnpopulated: true,
+		UseProtoNames:   false,
+	}.Marshal(td)
+	if err != nil {
+		return nil, err
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, err
+	}
+
+	return out, nil
 }

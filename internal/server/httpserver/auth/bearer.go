@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -8,17 +9,17 @@ import (
 func BearerTokenFromRequest(r *http.Request) (string, error) {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if header == "" {
-		return "", ErrMissingToken
+		return "", fmt.Errorf("missing bearer token")
 	}
 
 	scheme, token, ok := strings.Cut(header, " ")
 	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return "", ErrInvalidToken
+		return "", fmt.Errorf("malformed bearer token header")
 	}
 
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return "", ErrInvalidToken
+		return "", fmt.Errorf("malformed token")
 	}
 
 	return token, nil
