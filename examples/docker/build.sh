@@ -128,6 +128,15 @@ echo external-client-cert-slurm:
     --client-commonname conduit-service \
     --expiration 365
 
+echo external-client-cert-mcp:
+../../bin/conduit-server external-client-cert -d \
+    --separate-cert-key \
+    --cert-name conduit-mcp-client-cert.pem \
+    --key-name conduit-mcp-client-key.pem \
+    --output $CONDUIT_PATH/keys/ \
+    --client-commonname conduit-service \
+    --expiration 365
+
 echo external-client-cert-admin:
 ../../bin/conduit-server external-client-cert -d \
     --separate-cert-key \

@@ -1,0 +1,31 @@
+client:
+  cert: /etc/conduit/keys/conduit-mcp-client-cert.pem
+  key: /etc/conduit/keys/conduit-mcp-client-key.pem
+  grpc-limit: 100000000
+conduit:
+  ca: /etc/conduit/keys/conduit-external-ca.pem
+  ip: conduit-server.example.com
+  port: 23456
+  request-timeout: 5s
+debug: true
+oauth:
+  ca: /etc/conduit/keys/oauth-ca.crt
+  discovery-url: "https://zitadel.home.arpa/.well-known/openid-configuration"
+  supported-scopes:
+    - openid
+    - profile
+    - email
+  token-fallback-ttl: 1m0s
+  userinfo-fallback: true
+  username-claims:
+    - preferred_username
+  # introspection-auth-method: client_secret_basic
+server:
+  ip: 0.0.0.0
+  port: 8081
+  public-url: "https://mcp.home.arpa"
+  mcp-resource-path: /mcp
+  metadata-path: /.well-known/oauth-protected-resource
+  http:
+    allowed-origins:
+      - "https://openwebui.home.arpa"

@@ -10,18 +10,22 @@ import (
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 )
 
-func (m *MCPServer) verifyToken(
-	ctx context.Context,
-	token string,
-	_ *http.Request,
-) (*mcpauth.TokenInfo, error) {
-	p, err := m.validator.ValidateBearerToken(ctx, token, conduitauth.ValidateOptions{
-		// Do not pass RequiredScopes here if you want the MCP middleware
-		// to generate proper 403 insufficient_scope responses.
-	})
+func (m *MCPServer) verifyToken(ctx context.Context, token string, _ *http.Request) (*mcpauth.TokenInfo, error) {
+	p, err := m.validator.ValidateBearerToken(ctx, token, conduitauth.ValidateOptions{})
 	if err != nil {
+		m.log.Errorf("MCP token validation failed: %v", err)
 		return nil, fmt.Errorf("%w: %v", mcpauth.ErrInvalidToken, err)
 	}
+
+	m.log.Debugf(
+		"MCP token valid: username=%q subject=%q client_id=%q scopes=%v audiences=%v expires=%v",
+		p.Username,
+		p.Subject,
+		p.ClientID,
+		p.Scopes,
+		p.Audiences,
+		p.ExpiresAt,
+	)
 
 	if p.Username == "" {
 		return nil, fmt.Errorf("%w: missing username", mcpauth.ErrInvalidToken)
@@ -29,9 +33,6 @@ func (m *MCPServer) verifyToken(
 
 	exp := p.ExpiresAt
 	if exp.IsZero() {
-		// MCP SDK requires a non-zero future expiration.
-		// Since this verifier introspects every request, this is just a short
-		// per-request compatibility TTL, not token trust beyond introspection.
 		exp = time.Now().Add(m.tokenExpirationFallback)
 	}
 

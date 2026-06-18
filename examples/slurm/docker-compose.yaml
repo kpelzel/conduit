@@ -80,8 +80,6 @@ services:
         ipv4_address: 192.168.22.7
 
 networks:
-  # docker_conduit:
-  #   external: true
   slurm:
     driver: bridge
     ipam:

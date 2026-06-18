@@ -3,48 +3,27 @@
 package mcpcmd
 
 import (
-	"fmt"
-	"net"
 	"path/filepath"
 	"strings"
 
 	"github.com/lanl/conduit/defaults"
-	eutil "github.com/lanl/conduit/internal/etcd/util"
+	"github.com/lanl/conduit/internal/mcp"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
 const (
-	DefaultPort               = 23457
-	DefaultConfigLocation     = "/etc/conduit/"
-	ConfigName                = "conduit-mcp-config"
-	ConfigType                = "yaml"
-	envPrefix                 = "CONDUIT_MCP"
-	DefaultInternalCACertName = "conduit-internal-ca.pem"
-	DefaultInternalCAKeyName  = "conduit-internal-key.pem"
+	DefaultPort           = 8081
+	DefaultConfigLocation = "/etc/conduit/"
+	ConfigName            = "conduit-mcp-config"
+	ConfigType            = "yaml"
+	envPrefix             = "CONDUIT_MCP"
+	DefaultDebug          = false
+	DefaultIP             = "127.0.0.1"
 )
 
 var (
 	finalConfigPath = ""
-
-	DefaultETCDIPNet    = []net.IP{net.IPv4(127, 0, 0, 1)}
-	DefaultETCDHostname = []string{"etcd.example.com"}
-	DefaultETCDPort     = []int{2379}
-	DefaultEtcdConfig   = eutil.EViperConfig{
-		Hostname: DefaultETCDHostname[0],
-		IP:       DefaultETCDIPNet[0].String(),
-		Port:     DefaultETCDPort[0],
-	}
-	DefaultIPNet                  = []string{"127.0.0.1"}
-	DefaultInternalCACertLocation = fmt.Sprintf("%v/%v", filepath.Clean(DefaultConfigLocation), DefaultInternalCACertName)
-	DefaultInternalCAKeyLocation  = fmt.Sprintf("%v/%v", filepath.Clean(DefaultConfigLocation), DefaultInternalCAKeyName)
-	DefaultFTAOptions             = []string{""}
-	DefaultHostname               = []string{"conduitrunner.example.com"}
-
-	DefaultEnvironment = map[string]string{
-		"PATH":            "/bin:/usr/bin/:/usr/local/bin/",
-		"LD_LIBRARY_PATH": "/lib/:/lib64/:/usr/local/lib",
-	}
 )
 
 func initConfig(cfgFile string) {
@@ -73,30 +52,47 @@ func initConfig(cfgFile string) {
 		logrus.Errorf("failed to read config file: %v", err)
 	}
 
-	// When we bind flags to environment variables expect that the
-	// environment variables are prefixed, e.g. a flag like --number
-	// binds to an environment variable STING_NUMBER. This helps
-	// avoid conflicts.
-	viper.SetEnvPrefix(envPrefix)
-
 	// Bind to environment variables
-	// Works great for simple config names, but needs help for names
-	// like --favorite-color which we fix in the bindFlags function
+	viper.SetEnvPrefix(envPrefix)
+	viper.SetEnvKeyReplacer(strings.NewReplacer(
+		".", "_",
+		"-", "_",
+	))
 	viper.AutomaticEnv()
 }
 
 func createDefaultConfig() {
-	viper.SetDefault(defaults.ConfigInternalCACertKey, DefaultInternalCACertLocation)
-	viper.SetDefault(defaults.ConfigInternalCAKeyKey, DefaultInternalCAKeyLocation)
-
-	viper.SetDefault(defaults.ConfigETCDKey, []eutil.EViperConfig{DefaultEtcdConfig})
-
-	viper.SetDefault(defaults.ConfigServerIPKey, DefaultIPNet)
+	// mcp config
+	viper.SetDefault(defaults.ConfigServerIPKey, DefaultIP)
 	viper.SetDefault(defaults.ConfigServerPortKey, DefaultPort)
-	viper.SetDefault(defaults.ConfigServerHostnameKey, DefaultHostname)
+	viper.SetDefault(defaults.ConfigMCPPublicBaseURLKey, "")
+	viper.SetDefault(defaults.ConfigMCPResourcePathKey, mcp.DefaultResourcePath)
+	viper.SetDefault(defaults.ConfigMCPResourceMetadataPathKey, mcp.DefaultMetadataPath)
+	viper.SetDefault(defaults.ConfigServerHTTPAllowedOriginsKey, []string{"*"})
 
-	viper.SetDefault(defaults.ConfigFTAOptionsKey, DefaultFTAOptions)
-	viper.SetDefault(defaults.ConfigFTAEnvKey, DefaultEnvironment)
+	// conduit config
+	viper.SetDefault(defaults.ConfigConduitIPKey, defaults.DefaultConduitHost)
+	viper.SetDefault(defaults.ConfigConduitPortKey, defaults.DefaultConduitPort)
+	viper.SetDefault(defaults.ConfigConduitCAKey, defaults.DefaultConduitCA)
+	viper.SetDefault(defaults.ConfigConduitTimeoutKey, defaults.DefaultReqTimeout)
+
+	// client config
+	viper.SetDefault(defaults.ConfigClientGrpcLimitKey, defaults.DefaultClientGRPCLimit)
+	viper.SetDefault(defaults.ConfigClientCertKey, defaults.DefaultClientCert)
+	viper.SetDefault(defaults.ConfigClientKeyKey, defaults.DefaultClientKey)
+
+	// oauth config
+	viper.SetDefault(defaults.ConfigOAuthUserFallbackKey, defaults.DefaultOAuthUserFallback)
+	viper.SetDefault(defaults.ConfigOAuthUserClaimsKey, defaults.DefaultUsernameClaims)
+	viper.SetDefault(defaults.ConfigOAuthDiscoveryKey, "")
+	viper.SetDefault(defaults.ConfigOAuthclientIDKey, "")
+	viper.SetDefault(defaults.ConfigOAuthclientSecretKey, "")
+	viper.SetDefault(defaults.ConfigOAuthRequiredScopesKey, []string{})
+	viper.SetDefault(defaults.ConfigOAuthSupportedScopesKey, []string{})
+	viper.SetDefault(defaults.ConfigOAuthTokenFallbackTTLKey, mcp.DefaultTokenFallbackTTL)
+	viper.SetDefault(defaults.ConfigOAuthCAKey, "")
+
+	viper.SetDefault(defaults.ConfigDebugKey, DefaultDebug)
 
 	err := viper.SafeWriteConfig()
 	if err != nil {

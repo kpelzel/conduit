@@ -5,9 +5,7 @@ package fta
 import (
 	"bufio"
 	"bytes"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +13,7 @@ import (
 	brotli "github.com/andybalholm/brotli"
 	proto "github.com/lanl/conduit/api"
 	"github.com/lanl/conduit/defaults"
+	cliutil "github.com/lanl/conduit/internal/cli/util"
 	"github.com/lanl/conduit/internal/etcd"
 	"github.com/lanl/conduit/internal/etcd/util"
 	"github.com/lanl/conduit/internal/fta/plugin"
@@ -41,15 +40,9 @@ func FTAInit(debug bool) (_ *logger.ConduitLogger, _ proto.IncompleteTransfer, _
 		log.Fatalf("failed to parse cert from stdin: %v", err)
 	}
 
-	var certPool *x509.CertPool
-	caPath := viper.GetString(defaults.ConfigInternalCACertKey)
-	if caPath != "" {
-		certPool = x509.NewCertPool()
-		caCert, err := loadCAFromFile(caPath)
-		if err != nil {
-			log.Fatalf("failed to get CA cert from [%v]: %v", caPath, err)
-		}
-		certPool.AddCert(caCert)
+	certPool, err := cliutil.GetCertPoolFromViper(defaults.ConfigInternalCACertKey)
+	if err != nil {
+		log.Fatalf("failed to get CA cert from config: %v", err)
 	}
 
 	endpoints, err := util.GetEtcdEndpointsFromViper()
@@ -65,22 +58,6 @@ func FTAInit(debug bool) (_ *logger.ConduitLogger, _ proto.IncompleteTransfer, _
 
 	return log, it, em, nodeList
 
-}
-
-// loadCAFromFile decodes the file at the specified path to return a CA certificate
-func loadCAFromFile(CAPath string) (*x509.Certificate, error) {
-	certBytes, err := os.ReadFile(CAPath)
-	if err != nil {
-		return nil, fmt.Errorf("error reading certificate from file: %v", err)
-	}
-	certBlock, _ := pem.Decode(certBytes)
-	// cm.log.Infof("loaded %v: %v", certPath, certBlock.Type)
-	cert, err := x509.ParseCertificate(certBlock.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing certificate from file: %v", err)
-	}
-
-	return cert, nil
 }
 
 // extractStdin will return all the bytes that are provided from stdin

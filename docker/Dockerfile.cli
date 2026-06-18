@@ -43,12 +43,7 @@ CMD [ "-h" ]
 
 
 ################################################################################
-### Stage #2:  Pure Alpine container (no Go) with Kraken/Layercake copied in
-###
-### This container is intended to provide a runnable kraken-layercake environment.
-### You will likely want ot pass in /config.yaml /state.json and various /tftp/** files.
-### E.g. podman run --net=host -v tftp:/tftp -v etc/kraken:/etc/kraken kraken-layercake
-###
+### Stage #2:  Pure Alpine container (no Go) with conduit copied in
 ################################################################################
 FROM docker.io/library/alpine:${ALPINE} AS conduit-cli
 LABEL maintainer="Kevin Pelzel <kpelzel@lanl.gov>"

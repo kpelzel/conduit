@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lanl/conduit/defaults"
+	"github.com/lanl/conduit/internal/logger"
 )
 
 type Config struct {
@@ -34,10 +36,15 @@ type Config struct {
 	UseUserInfoFallback bool
 
 	HTTPClient *http.Client
+	TLSConfig  *tls.Config
 	Now        func() time.Time
+
+	ViperIntrospectionAuthMethod      string
+	IntrospectionAuthMethodsSupported []string
 }
 
 type Introspector struct {
+	log        *logger.ConduitLogger
 	cfg        Config
 	httpClient *http.Client
 	now        func() time.Time
@@ -48,7 +55,7 @@ type ValidateOptions struct {
 	ExpectedAudience string
 }
 
-func NewIntrospector(ctx context.Context, cfg Config) (*Introspector, error) {
+func NewIntrospector(ctx context.Context, cfg Config, log *logger.ConduitLogger) (*Introspector, error) {
 	if cfg.ClientID == "" {
 		return nil, fmt.Errorf("client ID is required")
 	}
@@ -58,7 +65,14 @@ func NewIntrospector(ctx context.Context, cfg Config) (*Introspector, error) {
 
 	client := cfg.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 5 * time.Second}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		if cfg.TLSConfig != nil {
+			transport.TLSClientConfig = cfg.TLSConfig
+		}
+		client = &http.Client{
+			Timeout:   5 * time.Second,
+			Transport: transport,
+		}
 	}
 
 	if cfg.IntrospectionURL == "" || cfg.UserInfoURL == "" || cfg.Issuer == "" {
@@ -90,6 +104,7 @@ func NewIntrospector(ctx context.Context, cfg Config) (*Introspector, error) {
 			}
 
 			if cfg.UserInfoURL == "" {
+				log.Debugf("setting user info url to: %v", md.UserInfoEndpoint)
 				cfg.UserInfoURL = md.UserInfoEndpoint
 			}
 		}
@@ -116,13 +131,14 @@ func NewIntrospector(ctx context.Context, cfg Config) (*Introspector, error) {
 		cfg:        cfg,
 		httpClient: client,
 		now:        now,
+		log:        log,
 	}, nil
 }
 
 func (v *Introspector) ValidateBearerToken(ctx context.Context, rawToken string, opts ValidateOptions) (*Principal, error) {
 	rawToken = strings.TrimSpace(rawToken)
 	if rawToken == "" {
-		return nil, ErrMissingToken
+		return nil, fmt.Errorf("missing bearer token")
 	}
 
 	claims, err := v.introspect(ctx, rawToken)
@@ -132,7 +148,7 @@ func (v *Introspector) ValidateBearerToken(ctx context.Context, rawToken string,
 
 	active, _ := claims["active"].(bool)
 	if !active {
-		return nil, ErrInactiveToken
+		return nil, fmt.Errorf("token is inactive")
 	}
 
 	p := principalFromClaims(claims, v.cfg.UsernameClaims)
@@ -148,22 +164,49 @@ func (v *Introspector) ValidateBearerToken(ctx context.Context, rawToken string,
 	}
 
 	if p.Username == "" {
-		return nil, ErrMissingUsername
+		return nil, fmt.Errorf("principal is missing username")
 	}
 
 	return p, nil
 }
 
 func (v *Introspector) introspect(ctx context.Context, rawToken string) (map[string]any, error) {
+	method := v.chooseIntrospectionAuthMethod()
+
 	form := url.Values{}
 	form.Set("token", rawToken)
 	form.Set("token_type_hint", "access_token")
+
+	switch method {
+	case "client_secret_post":
+		form.Set("client_id", v.cfg.ClientID)
+		form.Set("client_secret", v.cfg.ClientSecret)
+
+	case "client_secret_basic":
+		// auth header added after request creation
+
+	default:
+		return nil, fmt.Errorf("unsupported introspection auth method %q", method)
+	}
+
+	body := form.Encode()
+
+	v.log.Debugf(
+		"introspection request: method=%s url=%s client_id_len=%d client_secret_len=%d body_len=%d has_client_id=%t has_client_secret=%t",
+		method,
+		v.cfg.IntrospectionURL,
+		len(v.cfg.ClientID),
+		len(v.cfg.ClientSecret),
+		len(body),
+		form.Get("client_id") != "",
+		form.Get("client_secret") != "",
+	)
 
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
 		v.cfg.IntrospectionURL,
-		strings.NewReader(form.Encode()),
+		strings.NewReader(body),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create introspection request: %w", err)
@@ -172,8 +215,20 @@ func (v *Introspector) introspect(ctx context.Context, rawToken string) (map[str
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
-	// Most IdPs expect client_secret_basic for introspection.
-	req.SetBasicAuth(v.cfg.ClientID, v.cfg.ClientSecret)
+	// Important if any 307/308 redirect happens.
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(body)), nil
+	}
+
+	if method == "client_secret_basic" {
+		req.SetBasicAuth(v.cfg.ClientID, v.cfg.ClientSecret)
+	}
+
+	debugClient := *v.httpClient
+	debugClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		v.log.Errorf("introspection redirect: from=%s to=%s", via[len(via)-1].URL.String(), req.URL.String())
+		return http.ErrUseLastResponse
+	}
 
 	resp, err := v.httpClient.Do(req)
 	if err != nil {
@@ -182,7 +237,7 @@ func (v *Introspector) introspect(ctx context.Context, rawToken string) (map[str
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("introspection client authentication failed: %w", ErrInvalidToken)
+		return nil, fmt.Errorf("introspection client authentication failed: %v", resp.StatusCode)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -203,7 +258,7 @@ func (v *Introspector) introspect(ctx context.Context, rawToken string) (map[str
 
 func (v *Introspector) validatePrincipal(p *Principal, opts ValidateOptions) error {
 	if !p.ExpiresAt.IsZero() && !p.ExpiresAt.After(v.now()) {
-		return ErrInvalidToken
+		return fmt.Errorf("token is expired")
 	}
 
 	requiredScopes := append([]string{}, v.cfg.RequiredScopes...)
@@ -219,7 +274,7 @@ func (v *Introspector) validatePrincipal(p *Principal, opts ValidateOptions) err
 	}
 
 	if expectedAudience != "" && !contains(p.Audiences, expectedAudience) {
-		return ErrInvalidAudience
+		return fmt.Errorf("invalid audience")
 	}
 
 	return nil
@@ -228,8 +283,10 @@ func (v *Introspector) validatePrincipal(p *Principal, opts ValidateOptions) err
 // enrichFromUserInfo will retrieve the user info from the idp's userinfo_endpoint using the provided bearer token
 func (v *Introspector) enrichFromUserInfo(ctx context.Context, rawToken string, p *Principal) error {
 	if v.cfg.UserInfoURL == "" {
-		return ErrMissingUsername
+		return fmt.Errorf("introspector cfg is missing the userinfo url")
 	}
+
+	v.log.Debugf("enrich userinfo")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.cfg.UserInfoURL, nil)
 	if err != nil {
@@ -246,7 +303,7 @@ func (v *Introspector) enrichFromUserInfo(ctx context.Context, rawToken string, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return ErrMissingUsername
+		return fmt.Errorf("user info request responded with: %v %+v", resp.StatusCode, req)
 	}
 
 	var claims map[string]any
@@ -259,7 +316,7 @@ func (v *Introspector) enrichFromUserInfo(ctx context.Context, rawToken string, 
 
 	userInfoSub := stringClaim(claims, "sub")
 	if p.Subject != "" && userInfoSub != "" && p.Subject != userInfoSub {
-		return ErrInvalidToken
+		return fmt.Errorf("claims subject is different than principal subject")
 	}
 
 	if p.Claims == nil {
@@ -279,6 +336,8 @@ func (v *Introspector) enrichFromUserInfo(ctx context.Context, rawToken string, 
 	if p.Username == "" {
 		p.Username = firstStringClaim(claims, v.cfg.UsernameClaims)
 	}
+
+	v.log.Debugf("claims: %+v", p.Claims)
 
 	return nil
 }
@@ -302,4 +361,32 @@ func principalFromClaims(claims map[string]any, usernameClaims []string) *Princi
 
 func (v *Introspector) Issuer() string {
 	return v.cfg.Issuer
+}
+
+func (v *Introspector) chooseIntrospectionAuthMethod() string {
+	if v.cfg.ViperIntrospectionAuthMethod != "" {
+		return v.cfg.ViperIntrospectionAuthMethod
+	}
+
+	methods := v.cfg.IntrospectionAuthMethodsSupported
+	if len(methods) == 0 {
+		// RFC 8414 gives no default for introspection.
+		// Basic is common, but not universal.
+		return "client_secret_basic"
+	}
+
+	if contains(methods, "client_secret_basic") {
+		return "client_secret_basic"
+	}
+	if contains(methods, "client_secret_post") {
+		return "client_secret_post"
+	}
+	if contains(methods, "private_key_jwt") {
+		return "private_key_jwt"
+	}
+	if contains(methods, "client_secret_jwt") {
+		return "client_secret_jwt"
+	}
+
+	return methods[0]
 }

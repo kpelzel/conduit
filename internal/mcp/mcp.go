@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/handlers"
 	proto "github.com/lanl/conduit/api"
 	"github.com/lanl/conduit/defaults"
+	cliutil "github.com/lanl/conduit/internal/cli/util"
 	"github.com/lanl/conduit/internal/logger"
 	"github.com/lanl/conduit/internal/server/httpserver"
 	conduitauth "github.com/lanl/conduit/internal/server/httpserver/auth"
@@ -21,6 +22,12 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
+)
+
+const (
+	DefaultResourcePath     = "/mcp"
+	DefaultMetadataPath     = "/.well-known/oauth-protected-resource"
+	DefaultTokenFallbackTTL = time.Minute
 )
 
 type MCPServer struct {
@@ -34,6 +41,7 @@ type MCPServer struct {
 	validator *conduitauth.Introspector
 
 	requiredScopes      []string
+	supportedScopes     []string
 	resourceURL         string
 	resourceMetadataURL string
 
@@ -63,6 +71,7 @@ func CreateMCPServer(log *logger.ConduitLogger, mcpAddr string, clientCert *tls.
 	clientSecret := viper.GetString(defaults.ConfigOAuthclientSecretKey)
 	userInfoFallback := viper.GetBool(defaults.ConfigOAuthUserFallbackKey)
 	usernameClaims := viper.GetStringSlice(defaults.ConfigOAuthUserClaimsKey)
+	introspectionAuthMethod := viper.GetString(defaults.ConfigOAuthIntrospectionAuthMethodKey)
 
 	if discoveryURL == "" {
 		return nil, fmt.Errorf("OAuth discovery URL is required")
@@ -77,6 +86,18 @@ func CreateMCPServer(log *logger.ConduitLogger, mcpAddr string, clientCert *tls.
 	authCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Load OAuth CA certificate pool (starts with system pool, adds custom CA if configured)
+	oauthCertPool, err := cliutil.GetCertPoolFromViper(defaults.ConfigOAuthCAKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load OAuth CA certificate: %w", err)
+	}
+
+	// Configure TLS with the OAuth CA certificate pool for OAuth discovery
+	tlsConfig := &tls.Config{
+		RootCAs:    oauthCertPool,
+		MinVersion: tls.VersionTLS12,
+	}
+
 	validator, err := conduitauth.NewIntrospector(authCtx, conduitauth.Config{
 		DiscoveryURL: discoveryURL,
 
@@ -87,9 +108,13 @@ func CreateMCPServer(log *logger.ConduitLogger, mcpAddr string, clientCert *tls.
 
 		UseUserInfoFallback: userInfoFallback,
 
+		TLSConfig: tlsConfig,
+
+		ViperIntrospectionAuthMethod: introspectionAuthMethod,
+
 		// Keep audience here if you already have a shared config key.
 		// ExpectedAudience: viper.GetString(defaults.ConfigOAuthAudienceKey),
-	})
+	}, l)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP OAuth validator: %w", err)
 	}
@@ -99,29 +124,30 @@ func CreateMCPServer(log *logger.ConduitLogger, mcpAddr string, clientCert *tls.
 		return nil, fmt.Errorf("failed to get grpc client: %w", err)
 	}
 
-	publicBaseURL := strings.TrimRight(viper.GetString(defaults.ConfigServerMCPPublicBaseURLKey), "/")
+	publicBaseURL := strings.TrimRight(viper.GetString(defaults.ConfigMCPPublicBaseURLKey), "/")
 	if publicBaseURL == "" {
 		return nil, fmt.Errorf("MCP public base URL is required")
 	}
 
-	resourcePath := viper.GetString(defaults.ConfigServerMCPResourcePathKey)
+	resourcePath := viper.GetString(defaults.ConfigMCPResourcePathKey)
 	if resourcePath == "" {
-		resourcePath = "/mcp"
+		resourcePath = DefaultResourcePath
 	}
 
-	resourceMetadataPath := viper.GetString(defaults.ConfigServerMCPResourceMetadataPathKey)
+	resourceMetadataPath := viper.GetString(defaults.ConfigMCPResourceMetadataPathKey)
 	if resourceMetadataPath == "" {
-		resourceMetadataPath = "/.well-known/oauth-protected-resource"
+		resourceMetadataPath = DefaultMetadataPath
 	}
 
 	resourceURL := publicBaseURL + "/" + strings.TrimLeft(resourcePath, "/")
 	resourceMetadataURL := publicBaseURL + "/" + strings.TrimLeft(resourceMetadataPath, "/")
 
 	requiredScopes := viper.GetStringSlice(defaults.ConfigOAuthRequiredScopesKey)
+	supportedScopes := viper.GetStringSlice(defaults.ConfigOAuthSupportedScopesKey)
 
 	fallbackTTL := viper.GetDuration(defaults.ConfigOAuthTokenFallbackTTLKey)
 	if fallbackTTL <= 0 {
-		fallbackTTL = time.Minute
+		fallbackTTL = DefaultTokenFallbackTTL
 	}
 
 	srv := mcpsdk.NewServer(&mcpsdk.Implementation{
@@ -138,6 +164,7 @@ func CreateMCPServer(log *logger.ConduitLogger, mcpAddr string, clientCert *tls.
 		mux:                     mux,
 		validator:               validator,
 		requiredScopes:          requiredScopes,
+		supportedScopes:         supportedScopes,
 		resourceURL:             resourceURL,
 		resourceMetadataURL:     resourceMetadataURL,
 		tokenExpirationFallback: fallbackTTL,
@@ -188,7 +215,7 @@ func (m *MCPServer) registerMCPRoutes() {
 		// If you add an Issuer() method to your Introspector, use that.
 		AuthorizationServers: []string{m.validator.Issuer()},
 
-		ScopesSupported: m.requiredScopes,
+		ScopesSupported: m.supportedScopes,
 	}
 
 	m.mux.Handle(
@@ -213,10 +240,10 @@ func (m *MCPServer) registerMCPRoutes() {
 		m.log.Infof("Method: %s %s", r.Method, r.URL.Path)
 
 		for k, v := range r.Header {
-			if strings.EqualFold(k, "Authorization") {
-				m.log.Debugf("Header: %s=%v", k, []string{"Bearer <redacted>"})
-				continue
-			}
+			// if strings.EqualFold(k, "Authorization") {
+			// 	m.log.Debugf("Header: %s=%v", k, []string{fmt.Sprintf("Bearer <redacted> (%v)", len(v))})
+			// 	continue
+			// }
 
 			m.log.Debugf("Header: %s=%v", k, v)
 		}

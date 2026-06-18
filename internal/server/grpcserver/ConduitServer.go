@@ -260,7 +260,7 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 	grpcAddr := net.JoinHostPort(serverIP.String(), strconv.Itoa(port))
 	var httpServer *httpserver.HTTPServer
 
-	httpEnabled := viper.GetBool(defaults.ConfigServerHTTPPortKey)
+	httpEnabled := viper.GetBool(defaults.ConfigServerHTTPEnabledKey)
 	if httpEnabled {
 		httpPort := viper.GetInt(defaults.ConfigServerHTTPPortKey)
 		httpAddr := net.JoinHostPort(serverIP.String(), strconv.Itoa(httpPort))

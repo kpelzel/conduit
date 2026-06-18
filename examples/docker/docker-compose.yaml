@@ -50,7 +50,7 @@ services:
       start_period: 5s
     networks:
       conduit:
-        ipv4_address: 192.168.20.140
+        ipv4_address: 192.168.20.40
 
   client:
     image: client:latest
@@ -406,77 +406,6 @@ services:
     networks:
       conduit:
         ipv4_address: 192.168.20.33
-
-  pocket-id:
-    image: ghcr.io/pocket-id/pocket-id:v2
-    restart: unless-stopped
-    # env_file: .env
-    environment:
-      - ENCRYPTION_KEY=JPrwA+HM6IgkWq0xiw4y/hp686LDJTqngs9+vOTwYew=
-      - APP_URL=https://pocketid.home.arpa
-      - TRUST_PROXY=true
-    ports:
-      - 1411:1411
-    volumes:
-      - /etc/conduit/pocketid/data:/app/data
-    # Optional healthcheck
-    healthcheck:
-      test: ["CMD", "/app/pocket-id", "healthcheck"]
-      interval: 1m30s
-      timeout: 5s
-      retries: 2
-      start_period: 10s
-    networks:
-      conduit:
-        ipv4_address: 192.168.20.41
-
-  caddy:
-    image: caddy:latest
-    container_name: caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./config_files/Caddyfile:/etc/caddy/Caddyfile:ro
-      - /etc/conduit/caddy/caddy_data:/data
-      - /etc/conduit/caddy/caddy_config:/config
-    networks:
-      conduit:
-        ipv4_address: 192.168.20.40
-
-  openwebui:
-    image: ghcr.io/open-webui/open-webui:dev
-    network_mode: host
-    container_name: openwebui
-    restart: unless-stopped
-    # ports:
-    #   - "3000:8080"
-    extra_hosts:
-      - "pocketid.home.arpa:192.168.20.40"
-      - "mcp.home.arpa:192.168.20.40"
-    volumes:
-      - /etc/conduit/openwebui:/app/backend/data
-      - /root/conduit-caddy-root.crt:/etc/ssl/certs/pocketid-root.crt:ro
-    environment:
-      - OLLAMA_BASE_URL=http://172.16.83.1:11434
-      - ENABLE_OAUTH_SIGNUP=true
-      - OAUTH_CLIENT_ID=ef106773-02f6-4794-9042-05f8b8c57e7f
-      - OAUTH_CLIENT_SECRET=zXCD4hJMVWfrf1dbQCoIpaCiJKp2oc9z
-      - OAUTH_PROVIDER_NAME=Pocket ID
-      - OPENID_PROVIDER_URL=https://pocketid.home.arpa/.well-known/openid-configuration
-      - OAUTH_MERGE_ACCOUNTS_BY_EMAIL=true
-      - OAUTH_SCOPES=openid email profile groups
-      - WEBUI_SECRET_KEY=OAlVhegIjLzWpJ0SB5Yq/c/mGUw7UIVkTtbixrb0HBc=
-      - SSL_CERT_FILE=/etc/ssl/certs/pocketid-root.crt
-      - GLOBAL_LOG_LEVEL=DEBUG
-      - WEBUI_URL=https://openwebui.home.arpa
-      # - ENCRYPTION_KEY=JPrwA+HM6IgkWq0xiw4y/hp686LDJTqngs9+vOTwYew=
-      # - APP_URL=https://pocketid.home.arpa
-      # - TRUST_PROXY=true
-    # networks:
-    #   conduit:
-    #     ipv4_address: 192.168.20.42
 
 networks:
   conduit:
