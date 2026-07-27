@@ -113,11 +113,12 @@ func (t *TransferDetails) ETCDActionKey() string {
 	return t.getKey(ActionKey)
 }
 
-// ETCDActionKey requires TransferDetails to have a minimum of TransferID specified
+// ETCDOptionsKey requires TransferDetails to have a minimum of TransferID specified
 func (t *TransferDetails) ETCDOptionsKey() string {
 	return t.getKey(OptionsKey)
 }
 
+// ETCDUserKey requires TransferDetails to have a minimum of TransferID specified
 func (t *TransferDetails) ETCDUserKey() string {
 	return t.getKey(UserKey)
 }
