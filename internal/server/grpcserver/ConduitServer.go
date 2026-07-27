@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	proto "github.com/lanl/conduit/api"
@@ -536,19 +535,6 @@ func (s *ConduitServer) rePutTransfers() {
 		} else {
 			s.log.Infof("successfully set transfer[%s] state to its current state", t.GetTransferID())
 		}
-	}
-}
-
-func (s *ConduitServer) updateNewWSConnections() {
-	for range s.wsRefresh {
-		s.tMutex.Lock()
-		mtd := &proto.MultiTransferDetails{Details: s.transfers}
-		json, err := protojson.Marshal(mtd)
-		if err != nil {
-			s.log.Errorf("Failed to marshal json for websocket connection: %v", err)
-		}
-		s.ws <- json
-		s.tMutex.Unlock()
 	}
 }
 
