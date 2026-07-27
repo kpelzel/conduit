@@ -142,7 +142,6 @@ function CONDUIT_JOB:transferCmd()
 	end
 
 	table.insert(final_args, "--quiet")
-	table.insert(final_args, "--skip-stat")
 
 	table.insert(final_args, "--user")
 	table.insert(final_args, tostring(self.uid))
@@ -405,7 +404,6 @@ local RESERVED_USER_FLAGS = {
 	["--work-dir"] = true,
 	["--quiet"] = true,
 	["-q"] = true,
-	["--skip-stat"] = true,
 	["--validate-only"] = true,
 	["--watch"] = true,
 	["--debug"] = true,

@@ -159,7 +159,7 @@ func attachRunCommand(pluginAction *actions.PluginAction) {
 
 	pluginAction.Command.Flags().BoolVarP(&quiet, "quiet", "q", false, "Reduce command output to only a transferID")
 	pluginAction.Command.Flags().BoolP("skip-validation", "s", false, "Skip waiting for validation to succeed")
-	pluginAction.Command.Flags().Bool("skip-stat", false, "Skip stating sources and destinations, this is not recommended")
+	pluginAction.Command.Flags().Bool("skip-stat", false, "Deprecated, no not use")
 	pluginAction.Command.Flags().BoolP("background", "b", false, "Submit a conduit transfer without watching it progress to completion")
 	pluginAction.Command.Flags().StringVar(&providedUser, "user", "", "The user to start the transfer as. Requires an admin cert & key to be provided")
 	pluginAction.Command.Flags().String("comment", "", "A comment for the transfer. Used by conduit services. Requires an admin or service cert & key to be provided")
