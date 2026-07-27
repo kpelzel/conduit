@@ -16,7 +16,7 @@ import (
 
 // GetTimeParams defines the parameters for the cityTime tool.
 type StartTransferParams struct {
-	Action      string   `json:"action" jsonschema:"transfer action. Use COPY by default unless the user explicitly asks to move or recursively copy/move. Valid values: COPY, MOVE, RECURSIVE_COPY, RECURSIVE_MOVE"`
+	Action      string   `json:"action" jsonschema:"transfer action. Use COPY by default unless the user explicitly asks to move or recursively copy/move. Valid values: CONDUIT_COPY, CONDUIT_MOVE"`
 	Source      []string `json:"source" jsonschema:"one or more source file or directory paths"`
 	Destination string   `json:"destination" jsonschema:"destination file or directory path"`
 }
@@ -54,10 +54,8 @@ func (m *MCPServer) registerTools() error {
 	}
 
 	startParamsSchema.Properties["action"].Enum = []any{
-		"COPY",
-		"MOVE",
-		"RECURSIVE_COPY",
-		"RECURSIVE_MOVE",
+		"CONDUIT_COPY",
+		"CONDUIT_MOVE",
 	}
 
 	mcpsdk.AddTool(m.mcpServer, &mcpsdk.Tool{
@@ -121,14 +119,9 @@ func (m *MCPServer) startTransfer(ctx context.Context, req *mcpsdk.CallToolReque
 		return nil, nil, fmt.Errorf("no authenticated user provided")
 	}
 
-	action, ok := proto.Action_value[params.Action]
-	if !ok {
-		return nil, nil, fmt.Errorf("provided an invalid action: %v", params.Action)
-	}
-
 	tr := &proto.TransferRequest{
 		User:        info.UserID,
-		Action:      proto.Action(action),
+		Action:      params.Action,
 		Source:      params.Source,
 		Destination: params.Destination,
 	}
@@ -150,7 +143,7 @@ func (m *MCPServer) startTransfer(ctx context.Context, req *mcpsdk.CallToolReque
 	message := fmt.Sprintf(
 		"Transfer submitted successfully. transfer_id=%s action=%s source=%v destination=%s state=%s active=%t.",
 		transferID,
-		resp.GetAction().String(),
+		resp.GetAction(),
 		resp.GetSource(),
 		resp.GetDestination(),
 		resp.GetState().String(),
