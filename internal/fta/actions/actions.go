@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	Action_COPY     = "CONDUIT_COPY"
-	Action_MOVE     = "CONDUIT_MOVE"
+	Action_COPY     = "COPY"
+	Action_MOVE     = "MOVE"
 	RecursiveFlag   = "recursive"
 	OmitMissingFlag = "omit-missing"
 )

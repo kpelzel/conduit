@@ -21,7 +21,7 @@ def main() -> None:
         transfer: api_pb2.TransferDetails = client.start_transfer(
             sources=["/mnt/fs_1/foo/hello.txt"],
             destination="/mnt/fs_2/bar/hello.txt",
-            action="CONDUIT_COPY",
+            action="COPY",
             options={
                 "recursive": True,
             },

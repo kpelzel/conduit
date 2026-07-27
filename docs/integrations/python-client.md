@@ -60,9 +60,9 @@ The following table describes the available actions and their supported options 
 
 | Action | Description | Options | Type | Required | Default |
 |--------|-------------|---------|------|----------|---------|
-| `CONDUIT_COPY` | Copy files/directories from source to destination | `recursive` | `bool` | No | `false` |
+| `COPY` | Copy files/directories from source to destination | `recursive` | `bool` | No | `false` |
 | | | `omit-missing` | `bool` | No | `false` |
-| `CONDUIT_MOVE` | Move files/directories (deletes source after successful transfer) | `recursive` | `bool` | No | `false` |
+| `MOVE` | Move files/directories (deletes source after successful transfer) | `recursive` | `bool` | No | `false` |
 | | | `omit-missing` | `bool` | No | `false` |
 
 ### Option Details
@@ -88,7 +88,7 @@ with ConduitClient(cfg) as client:
     transfer: api_pb2.TransferDetails = client.start_transfer(
         sources=["/mnt/fs_1/foo/hello.txt"],
         destination="/mnt/fs_2/bar/hello.txt",
-        action="CONDUIT_COPY",
+        action="COPY",
         options={
             "recursive": True,
         },
