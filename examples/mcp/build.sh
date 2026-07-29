@@ -19,7 +19,6 @@ mkdir -p "$MCP_DOCKER_PATH/generated"
 
 # Compose env_file entries must exist before docker compose reads the file.
 touch "$MCP_DOCKER_PATH/generated/openwebui.env"
-touch "$MCP_DOCKER_PATH/generated/litellm.env"
 touch "$MCP_DOCKER_PATH/generated/conduit-mcp.env"
 
 chmod 700 "$MCP_DOCKER_PATH/generated"
@@ -35,7 +34,6 @@ ZITADEL_POSTGRES_PASSWORD=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
 ZITADEL_ADMIN_USERNAME=admin
 ZITADEL_ADMIN_EMAIL=admin@example.com
 ZITADEL_ADMIN_PASSWORD=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 24)
-LITELLM_MASTER_KEY=sk-litellm-mcp-key
 EOF
 fi
 

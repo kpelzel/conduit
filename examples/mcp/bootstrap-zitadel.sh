@@ -14,6 +14,16 @@ DEMO_USERNAME="testuser"
 DEMO_EMAIL="testuser@example.com"
 DEMO_PASSWORD="password"
 
+ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@example.com}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-qMRW%g*qi3sZE65x6wiK}"
+
+MCP_SETUP_FILE="$MCP_DOCKER_PATH/generated/openwebui-mcp-setup.txt"
+
+MCP_CONNECTION_ID="conduit-mcp"
+MCP_SERVER_URL="https://mcp.home.arpa/mcp"
+OPENWEBUI_URL="https://openwebui.home.arpa"
+
 if [ -f "$STATE_FILE" ]; then
 	echo "ZITADEL already bootstrapped: $STATE_FILE"
 	exit 0
@@ -199,29 +209,35 @@ OPENWEBUI_JSON="$(api_post "/projects/${PROJECT_ID}/apps/oidc" "$OPENWEBUI_BODY"
 OPENWEBUI_CLIENT_ID="$(json_field "$OPENWEBUI_JSON" '.clientId')"
 OPENWEBUI_CLIENT_SECRET="$(json_field "$OPENWEBUI_JSON" '.clientSecret')"
 
-echo "Creating LiteLLM OBO OIDC app..."
-LITELLM_BODY="$(jq -n '{
-  name: "litellm-obo",
-  redirectUris: ["https://litellm.home.arpa/unused-oidc-callback"],
-  responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
-  grantTypes: [
-    "OIDC_GRANT_TYPE_AUTHORIZATION_CODE",
-    "OIDC_GRANT_TYPE_REFRESH_TOKEN",
-    "OIDC_GRANT_TYPE_TOKEN_EXCHANGE"
-  ],
-  appType: "OIDC_APP_TYPE_WEB",
-  authMethodType: "OIDC_AUTH_METHOD_TYPE_BASIC",
-  version: "OIDC_VERSION_1_0",
-  devMode: false,
-  accessTokenType: "OIDC_TOKEN_TYPE_BEARER",
-  accessTokenRoleAssertion: true,
-  idTokenRoleAssertion: true,
-  idTokenUserinfoAssertion: true,
-  clockSkew: "0s"
-}')"
-LITELLM_JSON="$(api_post "/projects/${PROJECT_ID}/apps/oidc" "$LITELLM_BODY")"
-LITELLM_OBO_CLIENT_ID="$(json_field "$LITELLM_JSON" '.clientId')"
-LITELLM_OBO_CLIENT_SECRET="$(json_field "$LITELLM_JSON" '.clientSecret')"
+MCP_CALLBACK_URI="${OPENWEBUI_URL}/oauth/clients/mcp:${MCP_CONNECTION_ID}/callback"
+
+echo "Creating Open WebUI Conduit MCP OIDC app..."
+MCP_OIDC_BODY="$(jq -n \
+  --arg redirect_uri "$MCP_CALLBACK_URI" \
+  '{
+    name: "openwebui-conduit-mcp",
+    redirectUris: [$redirect_uri],
+    responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
+    grantTypes: [
+      "OIDC_GRANT_TYPE_AUTHORIZATION_CODE",
+      "OIDC_GRANT_TYPE_REFRESH_TOKEN"
+    ],
+    appType: "OIDC_APP_TYPE_WEB",
+    authMethodType: "OIDC_AUTH_METHOD_TYPE_BASIC",
+    version: "OIDC_VERSION_1_0",
+    devMode: false,
+    accessTokenType: "OIDC_TOKEN_TYPE_BEARER",
+    accessTokenRoleAssertion: true,
+    idTokenRoleAssertion: false,
+    idTokenUserinfoAssertion: true,
+    clockSkew: "0s"
+  }')"
+
+MCP_OIDC_JSON="$(
+  api_post "/projects/${PROJECT_ID}/apps/oidc" "$MCP_OIDC_BODY"
+)"
+MCP_OAUTH_CLIENT_ID="$(json_field "$MCP_OIDC_JSON" '.clientId')"
+MCP_OAUTH_CLIENT_SECRET="$(json_field "$MCP_OIDC_JSON" '.clientSecret')"
 
 echo "Creating Conduit MCP API app..."
 CONDUIT_BODY="$(jq -n '{
@@ -271,59 +287,80 @@ OAUTH_MERGE_ACCOUNTS_BY_EMAIL=true
 OAUTH_SCOPES=openid email profile offline_access ${AUD_SCOPE}
 EOF
 
-cat > "$MCP_DOCKER_PATH/generated/litellm.env" <<EOF
-ZITADEL_PROJECT_ID=${PROJECT_ID}
-ZITADEL_LITELLM_OBO_CLIENT_ID=${LITELLM_OBO_CLIENT_ID}
-ZITADEL_LITELLM_OBO_CLIENT_SECRET=${LITELLM_OBO_CLIENT_SECRET}
-EOF
-
 cat > "$MCP_DOCKER_PATH/generated/conduit-mcp.env" <<EOF
 CONDUIT_MCP_OAUTH_CLIENT_ID=${CONDUIT_CLIENT_ID}
 CONDUIT_MCP_OAUTH_CLIENT_SECRET=${CONDUIT_CLIENT_SECRET}
-CONDUIT_MCP_OAUTH_ISSUER=https://zitadel.home.arpa
-CONDUIT_MCP_OAUTH_INTROSPECTION_URL=https://zitadel.home.arpa/oauth/v2/introspect
-CONDUIT_MCP_OAUTH_USERINFO_URL=https://zitadel.home.arpa/oidc/v1/userinfo
-EOF
-
-cat > "$SCRIPT_DIR/config_files/litellm-config.yaml" <<EOF
-model_list: []
-
-general_settings:
-  master_key: os.environ/LITELLM_MASTER_KEY
-
-mcp_servers:
-  conduit_mcp:
-    url: "https://mcp.home.arpa/mcp"
-    transport: "http"
-    auth_type: oauth2_token_exchange
-
-    token_exchange_endpoint: "https://zitadel.home.arpa/oauth/v2/token"
-    client_id: os.environ/ZITADEL_LITELLM_OBO_CLIENT_ID
-    client_secret: os.environ/ZITADEL_LITELLM_OBO_CLIENT_SECRET
-
-    audience: "${PROJECT_ID}"
-    scopes:
-      - "openid"
-      - "profile"
-      - "email"
-
-    subject_token_type: "urn:ietf:params:oauth:token-type:access_token"
+CONDUIT_MCP_OAUTH_ISSUER=${ZITADEL_URL}
+CONDUIT_MCP_OAUTH_INTROSPECTION_URL=${ZITADEL_URL}/oauth/v2/introspect
+CONDUIT_MCP_OAUTH_USERINFO_URL=${ZITADEL_URL}/oidc/v1/userinfo
 EOF
 
 cat > "$STATE_FILE" <<EOF
 ZITADEL_PROJECT_ID=${PROJECT_ID}
 ZITADEL_AUDIENCE_SCOPE=${AUD_SCOPE}
 OPENWEBUI_CLIENT_ID=${OPENWEBUI_CLIENT_ID}
-LITELLM_OBO_CLIENT_ID=${LITELLM_OBO_CLIENT_ID}
 CONDUIT_CLIENT_ID=${CONDUIT_CLIENT_ID}
+MCP_OAUTH_CLIENT_ID=${MCP_OAUTH_CLIENT_ID}
+MCP_OAUTH_CLIENT_SECRET=${MCP_OAUTH_CLIENT_SECRET}
+MCP_CONNECTION_ID=${MCP_CONNECTION_ID}
 DEMO_USER_ID=${DEMO_USER_ID}
 DEMO_USERNAME=${DEMO_USERNAME}
 DEMO_EMAIL=${DEMO_EMAIL}
 DEMO_PASSWORD=${DEMO_PASSWORD}
 EOF
 
-chmod 600 "$MCP_DOCKER_PATH/generated/"*.env "$STATE_FILE"
-chmod 600 "$SCRIPT_DIR/config_files/litellm-config.yaml"
+cat > "$MCP_SETUP_FILE" <<EOF
+Open WebUI Conduit MCP configuration
+=====================================
+
+Open WebUI:
+
+  URL:      ${OPENWEBUI_URL}
+  Username: ${ADMIN_EMAIL}
+  Password: ${ADMIN_PASSWORD}
+
+Log in as the Open WebUI administrator, then add an external tool server using
+these values:
+
+  Type:                     MCP (Streamable HTTP)
+  ID:                       ${MCP_CONNECTION_ID}
+  Name:                     Conduit MCP
+  URL:                      ${MCP_SERVER_URL}
+  Authentication:           OAuth 2.1 (Static)
+  OAuth Client ID:          ${MCP_OAUTH_CLIENT_ID}
+  OAuth Client Secret:      ${MCP_OAUTH_CLIENT_SECRET}
+  OAuth Server URL:         ${ZITADEL_URL}
+  OAuth Scopes:             openid profile email offline_access ${AUD_SCOPE}
+  OAuth Resource Parameter: Automatic
+
+IMPORTANT:
+
+  The ID must be exactly:
+
+    ${MCP_CONNECTION_ID}
+
+  Open WebUI uses the ID to construct this OAuth callback:
+
+    ${MCP_CALLBACK_URI}
+
+  After entering the values:
+
+    1. Click Register Client.
+    2. Save the MCP server.
+    3. Sign out of the administrator account.
+    4. Sign in as the test user.
+    5. Enable the Conduit MCP server for the test user.
+
+Test user login:
+
+  Username: ${DEMO_USERNAME}
+  Password: ${DEMO_PASSWORD}
+EOF
+
+chmod 600 \
+	"$MCP_DOCKER_PATH/generated/"*.env \
+	"$STATE_FILE" \
+	"$MCP_SETUP_FILE"
 
 echo
 echo "ZITADEL bootstrap complete."

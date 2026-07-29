@@ -1,27 +1,4 @@
 services:
-  # pocket-id:
-  #   image: ghcr.io/pocket-id/pocket-id:v2
-  #   restart: unless-stopped
-  #   # env_file: .env
-  #   environment:
-  #     - ENCRYPTION_KEY=JPrwA+HM6IgkWq0xiw4y/hp686LDJTqngs9+vOTwYew=
-  #     - APP_URL=https://pocketid.home.arpa
-  #     - TRUST_PROXY=true
-  #   ports:
-  #     - 1411:1411
-  #   volumes:
-  #     - /etc/conduit-mcp/pocketid/data:/app/data
-  #   # Optional healthcheck
-  #   healthcheck:
-  #     test: ["CMD", "/app/pocket-id", "healthcheck"]
-  #     interval: 1m30s
-  #     timeout: 5s
-  #     retries: 2
-  #     start_period: 10s
-  #   networks:
-  #     docker_conduit:
-  #       ipv4_address: 192.168.20.161
-
   caddy:
     image: caddy:latest
     container_name: caddy
@@ -51,7 +28,6 @@ services:
     extra_hosts:
       - "pocketid.home.arpa:192.168.20.160"
       - "mcp.home.arpa:192.168.20.160"
-      - "litellm.home.arpa:192.168.20.160"
       - "zitadel.home.arpa:192.168.20.160"
     volumes:
       - /etc/conduit-mcp/openwebui:/app/backend/data
@@ -91,7 +67,6 @@ services:
     command:
       - -d
     extra_hosts:
-      - "pocketid.home.arpa:192.168.20.160"
       - "mcp.home.arpa:192.168.20.160"
       - "zitadel.home.arpa:192.168.20.160"
     volumes:
@@ -106,62 +81,6 @@ services:
     networks:
       docker_conduit:
         ipv4_address: 192.168.20.163
-
-  litellm:
-    env_file:
-      - /etc/conduit-mcp/generated/litellm.env
-    image: docker.litellm.ai/berriai/litellm:main-stable
-    container_name: litellm
-    restart: unless-stopped
-    depends_on:
-      - conduit-mcp
-      - litellm-db
-    command: ["--config", "/app/config.yaml", "--port", "4000"]
-    extra_hosts:
-      - "pocketid.home.arpa:192.168.20.160"
-      - "mcp.home.arpa:192.168.20.160"
-      - "zitadel.home.arpa:192.168.20.160"
-    environment:
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      LITELLM_LOG: INFO
-      DATABASE_URL: postgresql://llmproxy:dbpassword9090@litellm-db:5432/litellm
-      STORE_MODEL_IN_DB: "True"
-      SSL_CERT_FILE: /etc/ssl/certs/openwebui-ca-bundle.pem
-    # environment:
-    #   - LITELLM_MASTER_KEY=sk-litellm-mcp-key
-    #   - LITELLM_LOG=INFO
-    #   - DATABASE_URL=postgresql://llmproxy:dbpassword9090@192.168.20.165:5432/litellm
-    #   - STORE_MODEL_IN_DB=True
-    #   - SSL_CERT_FILE=/etc/ssl/certs/openwebui-ca-bundle.pem
-    #   - MCP_CLIENT_ID=b8376aa2-c68e-4b7b-a252-82461ec6d653
-    #   - MCP_CLIENT_SECRET=KIstjwlSmOkGok4VvtnrrNqbroDg0TkK
-    volumes:
-      - ./config_files/litellm-config.yaml:/app/config.yaml
-      - /etc/conduit-mcp/openwebui-ca-bundle.pem:/etc/ssl/certs/openwebui-ca-bundle.pem:ro
-    networks:
-      docker_conduit:
-        ipv4_address: 192.168.20.164
-
-  litellm-db:
-    image: postgres:16
-    restart: unless-stopped
-    container_name: litellm_db
-    environment:
-      POSTGRES_DB: litellm
-      POSTGRES_USER: llmproxy
-      POSTGRES_PASSWORD: dbpassword9090
-    ports:
-      - "5432:5432"
-    volumes:
-      - /etc/conduit-mcp/postgres_data:/var/lib/postgresql/data # Persists Postgres data across container restarts
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d litellm -U llmproxy"]
-      interval: 1s
-      timeout: 5s
-      retries: 10
-    networks:
-      docker_conduit:
-        ipv4_address: 192.168.20.165
 
   zitadel-db:
     image: postgres:17-alpine

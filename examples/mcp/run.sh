@@ -85,10 +85,16 @@ wait_for_url "https://zitadel.home.arpa/.well-known/openid-configuration"
 wait_for_url "https://zitadel.home.arpa/.well-known/openid-configuration"
 
 # Start downstream services. Do not recreate caddy/zitadel here.
-$DOCKER_COMPOSE up -d --force-recreate litellm-db
 $DOCKER_COMPOSE up -d --force-recreate conduit-mcp
-$DOCKER_COMPOSE up -d --force-recreate litellm
-
-"${SCRIPT_DIR}/bootstrap-litellm.sh"
-
 $DOCKER_COMPOSE up -d --force-recreate openwebui
+
+MCP_SETUP_FILE="/etc/conduit-mcp/generated/openwebui-mcp-setup.txt"
+
+echo
+if [ -s "$MCP_SETUP_FILE" ]; then
+	cat "$MCP_SETUP_FILE"
+else
+	echo "Open WebUI MCP setup information was not generated." >&2
+	echo "Expected file: $MCP_SETUP_FILE" >&2
+fi
+echo
