@@ -16,7 +16,7 @@ import (
 
 // GetTimeParams defines the parameters for the cityTime tool.
 type StartTransferParams struct {
-	Action      string   `json:"action" jsonschema:"transfer action. Use COPY by default unless the user explicitly asks to move or recursively copy/move. Valid values: CONDUIT_COPY, CONDUIT_MOVE"`
+	Action      string   `json:"action" jsonschema:"transfer action. Use COPY by default unless the user explicitly asks to move or recursively copy/move. Valid values: COPY, MOVE"`
 	Source      []string `json:"source" jsonschema:"one or more source file or directory paths"`
 	Destination string   `json:"destination" jsonschema:"destination file or directory path"`
 }
@@ -54,8 +54,8 @@ func (m *MCPServer) registerTools() error {
 	}
 
 	startParamsSchema.Properties["action"].Enum = []any{
-		"CONDUIT_COPY",
-		"CONDUIT_MOVE",
+		"COPY",
+		"MOVE",
 	}
 
 	mcpsdk.AddTool(m.mcpServer, &mcpsdk.Tool{
