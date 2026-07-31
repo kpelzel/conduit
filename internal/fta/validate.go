@@ -109,9 +109,18 @@ func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer,
 
 	// check that there are any sources left
 	if len(filteredSources) == 0 {
+		warnings := ""
+		for _, w := range pluginErrors.Warnings {
+			if warnings == "" {
+				warnings = w.ErrMessage.Error()
+			} else {
+				warnings = fmt.Sprintf("%v; %v", warnings, w.ErrMessage.Error())
+			}
+		}
+
 		pluginErrors.Errors = append(pluginErrors.Errors, &plugin.FTAPathError{
 			PErr:       proto.Error_ERROR_INVALID_INPUT,
-			ErrMessage: fmt.Errorf("No valid sources provided"),
+			ErrMessage: fmt.Errorf("No valid sources provided; %v", warnings),
 		})
 
 		return pluginData, proto.DestInfo_DEST_NONE, pluginErrors
