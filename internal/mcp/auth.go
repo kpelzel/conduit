@@ -17,16 +17,6 @@ func (m *MCPServer) verifyToken(ctx context.Context, token string, _ *http.Reque
 		return nil, fmt.Errorf("%w: %v", mcpauth.ErrInvalidToken, err)
 	}
 
-	m.log.Debugf(
-		"MCP token valid: username=%q subject=%q client_id=%q scopes=%v audiences=%v expires=%v",
-		p.Username,
-		p.Subject,
-		p.ClientID,
-		p.Scopes,
-		p.Audiences,
-		p.ExpiresAt,
-	)
-
 	if p.Username == "" {
 		return nil, fmt.Errorf("%w: missing username", mcpauth.ErrInvalidToken)
 	}
