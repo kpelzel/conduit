@@ -49,11 +49,10 @@ LABEL maintainer="Kevin Pelzel <kpelzel@lanl.gov>"
 
 ARG TARGETARCH
 ARG TARGETOS
-ARG GRPC_HEALTH_PROBE_VERSION=v0.4.50
 
 RUN mkdir -p /etc/conduit 
 
-RUN wget -qO /bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-${TARGETOS}-${TARGETARCH} && \
+RUN wget -qO /bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/latest/download/grpc_health_probe-${TARGETOS}-${TARGETARCH} && \
     chmod +x /bin/grpc_health_probe
 
 COPY --from=conduit-build /sbin/conduit-server /sbin/conduit-server
