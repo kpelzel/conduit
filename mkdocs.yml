@@ -31,3 +31,4 @@ nav:
       - ETCD Direct Query: operations/etcd-direct-query.md
       - LDAP: operations/ldap.md
       - Slurm Plugin: integrations/slurm-plugin.md
+      - MCP Server: operations/conduit-mcp-server.md
