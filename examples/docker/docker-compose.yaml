@@ -124,7 +124,7 @@ services:
         [
           "CMD",
           "grpc_health_probe",
-          "-addr=conduit-server.example.com:23456",
+          "-addr=127.0.0.1:23456",
           "-tls",
           "-tls-ca-cert=/etc/conduit/keys/conduit-external-ca.pem",
           "-tls-server-name=conduit-server.example.com",
