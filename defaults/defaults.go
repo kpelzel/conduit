@@ -142,4 +142,9 @@ var (
 	DefaultUsernameClaims = []string{
 		"preferred_username",
 	}
+	DefaultSupportedScopes = []string{
+		"openid",
+		"profile",
+		"email",
+	}
 )

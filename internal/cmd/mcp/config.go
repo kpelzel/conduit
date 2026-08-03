@@ -88,7 +88,7 @@ func createDefaultConfig() {
 	viper.SetDefault(defaults.ConfigOAuthclientIDKey, "")
 	viper.SetDefault(defaults.ConfigOAuthclientSecretKey, "")
 	viper.SetDefault(defaults.ConfigOAuthRequiredScopesKey, []string{})
-	viper.SetDefault(defaults.ConfigOAuthSupportedScopesKey, []string{})
+	viper.SetDefault(defaults.ConfigOAuthSupportedScopesKey, defaults.DefaultSupportedScopes)
 	viper.SetDefault(defaults.ConfigOAuthTokenFallbackTTLKey, mcp.DefaultTokenFallbackTTL)
 	viper.SetDefault(defaults.ConfigOAuthCAKey, "")
 
