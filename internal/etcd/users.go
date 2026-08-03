@@ -33,7 +33,7 @@ func (em *ETCDManager) AddRoot() {
 		em.log.Fatalf("failed to add root user to root role: %v", err)
 	}
 
-	// at the time I wrote this, client.authStatus was not implemented on etcd 3.5.0-beta.4
+	// check that auth is enabled on etcd
 	ctx, cancel = context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
 	authStatus, err := em.client.AuthStatus(ctx)
 	cancel()
