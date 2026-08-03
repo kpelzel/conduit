@@ -18,13 +18,11 @@ services:
     env_file:
       - /etc/conduit-mcp/generated/openwebui.env
     image: ghcr.io/open-webui/open-webui:latest
-    network_mode: host
+    network_mode: host # required for communicating with external ollama instance
     container_name: openwebui
     restart: unless-stopped
     depends_on:
       - caddy
-    # ports:
-    #   - "3000:8080"
     extra_hosts:
       - "pocketid.home.arpa:192.168.20.160"
       - "mcp.home.arpa:192.168.20.160"
@@ -35,22 +33,10 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://172.16.83.1:11434
       - ENABLE_OAUTH_SIGNUP=true
-      # - OAUTH_CLIENT_ID=f523512c-1b03-4f39-b611-c1457e9b2ab9
-      # - OAUTH_CLIENT_SECRET=w61dHCFntnjyuQczAzSgHn7xzXItvLMu
-      # - OAUTH_PROVIDER_NAME=Pocket ID
-      # - OPENID_PROVIDER_URL=https://pocketid.home.arpa/.well-known/openid-configuration
       - OAUTH_MERGE_ACCOUNTS_BY_EMAIL=true
-      # - OAUTH_SCOPES=openid email profile groups
-      - WEBUI_SECRET_KEY=OAlVhegIjLzWpJ0SB5Yq/c/mGUw7UIVkTtbixrb0HBc=
       - SSL_CERT_FILE=/etc/ssl/certs/openwebui-ca-bundle.pem
       - GLOBAL_LOG_LEVEL=DEBUG
       - WEBUI_URL=https://openwebui.home.arpa
-      # - ENCRYPTION_KEY=JPrwA+HM6IgkWq0xiw4y/hp686LDJTqngs9+vOTwYew=
-      # - APP_URL=https://pocketid.home.arpa
-      # - TRUST_PROXY=true
-    # networks:
-    #   conduit:
-    #     ipv4_address: 192.168.20.162
 
   conduit-mcp:
     env_file:
@@ -75,9 +61,10 @@ services:
       - /etc/conduit/keys:/etc/conduit/keys
       - ./config_files/conduit-mcp-config.yaml:/etc/conduit/conduit-mcp-config.yaml:ro
       - /etc/conduit-mcp/caddy/caddy_data/caddy/pki/authorities/local/root.crt:/etc/conduit/keys/oauth-ca.crt:ro
-    # environment:
-    # - CONDUIT_MCP_OAUTH_CLIENT_ID=b8376aa2-c68e-4b7b-a252-82461ec6d653
-    # - CONDUIT_MCP_OAUTH_CLIENT_SECRET=KIstjwlSmOkGok4VvtnrrNqbroDg0TkK
+    environment:
+      - CONDUIT_MCP_OAUTH_ISSUER=https://zitadel.home.arpa
+      - CONDUIT_MCP_OAUTH_INTROSPECTION_URL=https://zitadel.home.arpa/oauth/v2/introspect
+      - CONDUIT_MCP_OAUTH_USERINFO_URL=https://zitadel.home.arpa/oidc/v1/userinfo
     networks:
       docker_conduit:
         ipv4_address: 192.168.20.163

@@ -7,3 +7,5 @@
 [conduit-fta full reference config](../configs/conduit-fta-full-reference-config.yaml)
 
 [conduit-cli full reference config](../configs/conduit-cli-full-reference-config.yaml)
+
+[conduit-mcp full reference config](../configs/conduit-mcp-full-reference-config.yaml)

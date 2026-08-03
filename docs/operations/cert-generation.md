@@ -115,3 +115,22 @@ These are optional certs that can be used to talk directly to etcd or rqlite usi
     --client-commonname "" \
     --expiration 365
 ```
+
+
+### Conduit MCP Server Cert & Key
+
+This cert and key are required for the mcp server to communicate with the conduit server
+
+```sh
+
+./conduit-server external-client-cert -d \
+    --external-ca-cert ./conduit-external-ca.pem \
+    --external-ca-key ./conduit-external-key.pem \
+    --separate-cert-key \
+    --cert-name conduit-mcp-client-cert.pem \
+    --key-name conduit-mcp-client-key.pem \
+    --output ./ \
+    --client-commonname conduit-service \
+    --expiration 365
+
+```

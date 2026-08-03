@@ -25,13 +25,13 @@ oauth:
   discovery-url: ""
   # a list of scopes that must be present in the oauth token for the request to be authorized
   required-scopes: []
-
+  # a list of scope values (as defined in RFC 6749) used in authorization requests to request access to this protected resource.
   supported-scopes: []
   # the auth method used for token introspection. If blank, conduit will attempt to discovery the preferred auth method from the idp. Current options are client_secret_basic and client_secret_post
   introspection-auth-method: ""
   # fallback time-to-live duration for tokens when expiration time cannot be determined from the token. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h"
   token-fallback-ttl: 1m0s
-  # when enabled, the oauth server will pass the provided bearer token to the idp to retrieve user information from the idp's userinfo endpoint
+  # when enabled, the mcp server will pass the provided bearer token to the idp to retrieve user information from the idp's userinfo endpoint
   userinfo-fallback: true
   # a list of claims that contain the username. Conduit will use the first claim in this list that contains text
   username-claims:
