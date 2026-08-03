@@ -124,14 +124,14 @@ var statusCmd = &cobra.Command{
 		logger.Debugf("received transfers")
 
 		// Create location to store all results
-		detailsSlice := []proto.TransferDetails{}
+		detailsSlice := []*proto.TransferDetails{}
 
 		// Get slice of TransferDetails from map of TransferDetails
 		details := mtd.GetDetails()
 		for ti, td := range details {
 			// check if this is a validation only transfer and completed successfully
 			if !(td.GetValidationOnly() && td.GetError() == proto.Error_ERROR_NONE && td.GetState() == proto.TransferState_TRANSFER_VALIDATION_COMPLETE) {
-				detailsSlice = append(detailsSlice, *details[ti])
+				detailsSlice = append(detailsSlice, details[ti])
 			}
 		}
 
@@ -238,7 +238,7 @@ var statusCmd = &cobra.Command{
 		}
 		// Send transfer details to printer
 		for t := range detailsSlice {
-			err = writer.Event(&detailsSlice[t])
+			err = writer.Event(detailsSlice[t])
 			if err != nil {
 				logger.Fatalf("status: failed to print xfer details: %v", err)
 			}

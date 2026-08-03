@@ -79,7 +79,7 @@ var watchCmd = &cobra.Command{
 
 		var mtd *proto.MultiTransferDetails
 		var details map[string]*proto.TransferDetails
-		var detailsSlice []proto.TransferDetails
+		var detailsSlice []*proto.TransferDetails
 		// Get transfer IDs if none specified
 		if len(tIDs) == 0 {
 			// Construct query
@@ -99,7 +99,7 @@ var watchCmd = &cobra.Command{
 			// Get slice of TransferDetails from map of TransferDetails
 			details = mtd.GetDetails()
 			for td := range details {
-				detailsSlice = append(detailsSlice, *details[td])
+				detailsSlice = append(detailsSlice, details[td])
 			}
 
 			// Sort by TransferDetails object creation time (inverse)
@@ -220,9 +220,9 @@ var watchCmd = &cobra.Command{
 			}
 			// Get slice of TransferDetails from map of TransferDetails
 			details = mtd.GetDetails()
-			detailsSlice = []proto.TransferDetails{}
+			detailsSlice = []*proto.TransferDetails{}
 			for td := range details {
-				detailsSlice = append(detailsSlice, *details[td])
+				detailsSlice = append(detailsSlice, details[td])
 			}
 
 			// Sort by TransferDetails object creation time
@@ -244,7 +244,7 @@ var watchCmd = &cobra.Command{
 			})
 			// Print status
 			for t := range detailsSlice {
-				err = writer.Event(&detailsSlice[t])
+				err = writer.Event(detailsSlice[t])
 				if err != nil {
 					logger.Fatalf("watch: failed to print xfer details: %v", err)
 				}
