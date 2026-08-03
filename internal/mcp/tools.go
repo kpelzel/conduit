@@ -12,13 +12,16 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// GetTimeParams defines the parameters for the cityTime tool.
+// StartTransferParams defines the parameters for the start_transfer tool.
 type StartTransferParams struct {
-	Action      string   `json:"action" jsonschema:"transfer action. Use COPY by default unless the user explicitly asks to move or recursively copy/move. Valid values: COPY, MOVE"`
-	Source      []string `json:"source" jsonschema:"one or more source file or directory paths"`
-	Destination string   `json:"destination" jsonschema:"destination file or directory path"`
+	Action      string                 `json:"action" jsonschema:"transfer action. Use COPY by default unless the user explicitly asks to move. Valid values: COPY, MOVE"`
+	Source      []string               `json:"source" jsonschema:"one or more source file or directory paths"`
+	Destination string                 `json:"destination" jsonschema:"destination file or directory path"`
+	Options     map[string]interface{} `json:"options,omitempty" jsonschema:"optional map of transfer options. CRITICAL: The 'recursive' option (bool) MUST be set to true when transferring directories, otherwise the directory will be skipped with a warning. Other available options include: 'omit-missing' (bool) - omit sources that don't exist. Plugin-specific options can also be provided here"`
 }
 
 type GetTransferStatusParams struct {
@@ -60,7 +63,7 @@ func (m *MCPServer) registerTools() error {
 
 	mcpsdk.AddTool(m.mcpServer, &mcpsdk.Tool{
 		Name:         "start_transfer",
-		Description:  "Start a Conduit file transfer. Use this when the user asks to copy, move, or transfer files or directories. On success, this tool has already submitted the transfer to Conduit and returns a transfer_id. The assistant should tell the user the transfer was submitted successfully and include the transfer_id. If the user did not specify an action, use COPY.",
+		Description:  "Start a Conduit file transfer. Use this when the user asks to copy, move, or transfer files or directories. On success, this tool has already submitted the transfer to Conduit and returns a transfer_id. The assistant should tell the user the transfer was submitted successfully and include the transfer_id. If the user did not specify an action, use COPY. IMPORTANT: When transferring directories, you MUST set options.recursive to true, otherwise directories will be skipped. Use options.omit-missing (bool) to skip missing sources.",
 		InputSchema:  startParamsSchema,
 		OutputSchema: startResultSchema,
 	}, m.startTransfer)
@@ -119,14 +122,52 @@ func (m *MCPServer) startTransfer(ctx context.Context, req *mcpsdk.CallToolReque
 		return nil, nil, fmt.Errorf("no authenticated user provided")
 	}
 
+	// Build the options map for the transfer request
+	options := make(map[string]*anypb.Any)
+
+	// Convert each option from the params.Options map to protobuf Any type
+	for key, value := range params.Options {
+		var anyValue *anypb.Any
+		var err error
+
+		// Handle different value types and convert to appropriate protobuf wrapper
+		switch v := value.(type) {
+		case bool:
+			anyValue, err = anypb.New(wrapperspb.Bool(v))
+		case string:
+			anyValue, err = anypb.New(wrapperspb.String(v))
+		case float64: // JSON numbers are float64
+			// Try to determine if it's an integer or float
+			if v == float64(int64(v)) {
+				anyValue, err = anypb.New(wrapperspb.Int64(int64(v)))
+			} else {
+				anyValue, err = anypb.New(wrapperspb.Double(v))
+			}
+		case int:
+			anyValue, err = anypb.New(wrapperspb.Int64(int64(v)))
+		case int64:
+			anyValue, err = anypb.New(wrapperspb.Int64(v))
+		default:
+			m.log.Warnf("unsupported option type for key %s: %T, skipping", key, v)
+			continue
+		}
+
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to convert option %s to protobuf: %w", key, err)
+		}
+
+		options[key] = anyValue
+	}
+
 	tr := &proto.TransferRequest{
 		User:        info.UserID,
 		Action:      params.Action,
 		Source:      params.Source,
 		Destination: params.Destination,
+		Options:     options,
 	}
 
-	m.log.Debugf("mcp start transfer request: %+v", tr)
+	m.log.Debugf("received start transfer request for user[%v]", info.UserID)
 
 	resp, err := m.conduitClient.StartTransfer(ctx, tr)
 	if err != nil {

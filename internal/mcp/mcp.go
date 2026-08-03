@@ -240,12 +240,10 @@ func (m *MCPServer) registerMCPRoutes() {
 		m.log.Infof("Method: %s %s", r.Method, r.URL.Path)
 
 		for k, v := range r.Header {
-			// if strings.EqualFold(k, "Authorization") {
-			// 	m.log.Debugf("Header: %s=%v", k, []string{fmt.Sprintf("Bearer <redacted> (%v)", len(v))})
-			// 	continue
-			// }
-
-			m.log.Debugf("Header: %s=%v", k, v)
+			if strings.EqualFold(k, "Authorization") {
+				m.log.Debugf("Header: %s=%v", k, []string{fmt.Sprintf("Bearer <redacted> (%v)", len(v))})
+				continue
+			}
 		}
 
 		authMiddleware(handler).ServeHTTP(w, r)
