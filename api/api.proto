@@ -62,8 +62,8 @@ message QueryOptions {
 
 enum QueryOperation {
     QUERY_NONE = 0;
-    QUERY_AND = 1;
-    QUERY_OR = 2;
+    QUERY_OR = 1;
+    QUERY_AND = 2;
 }
 
 // Cert contains a client cert and private key in one pem byte array
