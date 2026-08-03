@@ -224,12 +224,6 @@ func (v *Introspector) introspect(ctx context.Context, rawToken string) (map[str
 		req.SetBasicAuth(v.cfg.ClientID, v.cfg.ClientSecret)
 	}
 
-	debugClient := *v.httpClient
-	debugClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		v.log.Errorf("introspection redirect: from=%s to=%s", via[len(via)-1].URL.String(), req.URL.String())
-		return http.ErrUseLastResponse
-	}
-
 	resp, err := v.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("call introspection endpoint: %w", err)
