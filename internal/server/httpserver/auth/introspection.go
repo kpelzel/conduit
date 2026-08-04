@@ -109,6 +109,10 @@ func NewIntrospector(ctx context.Context, cfg Config, log *logger.ConduitLogger)
 				log.Debugf("setting user info url to: %v", md.UserInfoEndpoint)
 				cfg.UserInfoURL = md.UserInfoEndpoint
 			}
+
+			if len(cfg.IntrospectionAuthMethodsSupported) == 0 {
+				cfg.IntrospectionAuthMethodsSupported = md.IntrospectionEndpointAuthMethodsSupported
+			}
 		}
 	}
 
@@ -216,11 +220,6 @@ func (v *Introspector) introspect(ctx context.Context, rawToken string) (map[str
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-
-	// Important if any 307/308 redirect happens.
-	req.GetBody = func() (io.ReadCloser, error) {
-		return io.NopCloser(strings.NewReader(body)), nil
-	}
 
 	if method == "client_secret_basic" {
 		req.SetBasicAuth(v.cfg.ClientID, v.cfg.ClientSecret)
