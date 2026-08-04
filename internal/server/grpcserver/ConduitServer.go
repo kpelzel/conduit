@@ -426,7 +426,12 @@ func (s *ConduitServer) StartConduitServer(clearEtcd bool) error {
 
 	// TODO: monitor these go routines to watch if they crash
 	if s.httpServer != nil {
-		go s.httpServer.StartHTTPServer()
+		go func() {
+			err := s.httpServer.StartHTTPServer()
+			if err != nil {
+				s.log.Errorf("failed to start http server: %v", err)
+			}
+		}()
 	}
 
 	for _, sch := range s.sched {
