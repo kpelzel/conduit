@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/lanl/conduit/api"
 	"github.com/lanl/conduit/defaults"
+	cliutil "github.com/lanl/conduit/internal/cli/util"
 	"github.com/lanl/conduit/internal/logger"
 	"github.com/lanl/conduit/internal/server/httpserver/auth"
 	"github.com/spf13/viper"
@@ -75,21 +76,32 @@ func CreateHTTPServer(
 	authCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	oauthCertPool, err := cliutil.GetCertPoolFromViper(
+		defaults.ConfigOAuthCAKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to load OAuth CA certificate: %w",
+			err,
+		)
+	}
+
+	oauthTLSConfig := &tls.Config{
+		RootCAs:    oauthCertPool,
+		MinVersion: tls.VersionTLS12,
+	}
+
 	validator, err := auth.NewIntrospector(authCtx, auth.Config{
-		DiscoveryURL: discoveryURL,
-
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-
-		UsernameClaims: usernameClaims,
-
-		UseUserInfoFallback: userInfoFallback,
-
+		DiscoveryURL:                 discoveryURL,
+		ClientID:                     clientID,
+		ClientSecret:                 clientSecret,
+		UsernameClaims:               usernameClaims,
+		UseUserInfoFallback:          userInfoFallback,
+		TLSConfig:                    oauthTLSConfig,
 		ViperIntrospectionAuthMethod: introspectionAuthMethod,
-
 		// does the IdP return aud?
 		// ExpectedAudience: "conduit",
-	}, log)
+	}, l)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http validator: %v", err)
 	}
