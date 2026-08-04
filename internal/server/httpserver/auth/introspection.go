@@ -292,12 +292,12 @@ func (v *Introspector) enrichFromUserInfo(ctx context.Context, rawToken string, 
 
 	resp, err := v.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("call userinfo endpoint: %w", err)
+		return fmt.Errorf("failed to call userinfo endpoint: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("user info request responded with: %v %+v", resp.StatusCode, req)
+		return fmt.Errorf("user info request responded with: %v", resp.StatusCode)
 	}
 
 	var claims map[string]any
