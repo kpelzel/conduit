@@ -577,7 +577,7 @@ func (s *ConduitServer) WatchStatus(tids *proto.TransferIds, stream proto.Condui
 			streamMap := make(map[uuid.UUID]chan bool)
 			s.activeStreams[id] = streamMap
 		}
-		uChan := make(chan bool)
+		uChan := make(chan bool, 1)
 		s.activeStreams[id][streamID] = uChan
 		uChans[id] = uChan
 	}
@@ -1022,7 +1022,7 @@ func (s *ConduitServer) TransferNotify(notifyRequest *proto.NotifyRequest, strea
 		streamMap := make(map[uuid.UUID]chan *proto.NotifyMessage)
 		s.userStreams[user] = streamMap
 	}
-	uChan := make(chan *proto.NotifyMessage)
+	uChan := make(chan *proto.NotifyMessage, 1)
 	s.userStreams[user][streamID] = uChan
 
 	s.usMutex.Unlock()

@@ -701,28 +701,28 @@ func (s *ConduitServer) handleErrantEvents(evs []*clientv3.Event) {
 
 func (s *ConduitServer) updateTransferStreams(transferID uuid.UUID) {
 	s.asMutex.RLock()
-	for tID, sm := range s.activeStreams {
-		if tID == transferID {
-			for _, sc := range sm {
-				// NOTE: this will block if nobody is listening to the channel
-				sc <- true
-			}
-		}
+	defer s.asMutex.RUnlock()
+
+	for _, streamChan := range s.activeStreams[transferID] {
+		// NOTE: this will block if nobody is listening to the channel
+		streamChan <- true
 	}
-	s.asMutex.RUnlock()
 }
 
 func (s *ConduitServer) updateUserStreams(user string, nm *proto.NotifyMessage) {
 	s.usMutex.RLock()
-	for u, sm := range s.userStreams {
-		if u == user {
-			for _, sc := range sm {
-				// NOTE: this will block if nobody is listening to the channel
-				sc <- nm
-			}
+	defer s.usMutex.RUnlock()
+
+	for _, streamChan := range s.userStreams[user] {
+		select {
+		case streamChan <- nm:
+		default:
+			s.log.Warnf(
+				"dropping notification for slow user stream: user=%q",
+				user,
+			)
 		}
 	}
-	s.usMutex.RUnlock()
 }
 
 // pauseConduit will stop all transfer workers and watchdogs for this instance of conduit.

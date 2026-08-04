@@ -69,10 +69,6 @@ func (h *HTTPServer) queryTransfers(wr http.ResponseWriter, req *http.Request, u
 	// set user to the one that we authed with
 	qo.User = username
 
-	if qo.QueryOperation == api.QueryOperation_QUERY_NONE {
-		qo.QueryOperation = api.QueryOperation_QUERY_OR
-	}
-
 	mtd, err := h.conduitClient.Query(req.Context(), qo)
 	if err != nil {
 		http.Error(wr, fmt.Sprintf("failed to query conduit for transfers: %v", err), http.StatusInternalServerError)
