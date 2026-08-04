@@ -83,7 +83,7 @@ func filterTransfers(qo *proto.QueryOptions, transfers map[string]*proto.Transfe
 				if !found {
 					delete(finalTransfers, t.GetTransferID())
 				}
-			case proto.QueryOperation_QUERY_NONE, proto.QueryOperation_QUERY_OR:
+			case proto.QueryOperation_QUERY_OR:
 				// in the OR operation, we add the transfer if it did match this specific query regex
 				if found {
 					finalTransfers[t.GetTransferID()] = t
