@@ -1,3 +1,5 @@
+// Copyright 2026. Triad National Security, LLC. All rights reserved.
+
 package mcp
 
 import (
@@ -40,10 +42,12 @@ type MCPServer struct {
 
 	validator *conduitauth.Introspector
 
-	requiredScopes      []string
-	supportedScopes     []string
-	resourceURL         string
-	resourceMetadataURL string
+	requiredScopes       []string
+	supportedScopes      []string
+	resourcePath         string
+	resourceMetadataPath string
+	resourceURL          string
+	resourceMetadataURL  string
 
 	tokenExpirationFallback time.Duration
 
@@ -112,7 +116,7 @@ func CreateMCPServer(log *logger.ConduitLogger, mcpAddr string, clientCert *tls.
 
 		ViperIntrospectionAuthMethod: introspectionAuthMethod,
 
-		// Keep audience here if you already have a shared config key.
+		// TODO: Keep audience here if you already have a shared config key.
 		// ExpectedAudience: viper.GetString(defaults.ConfigOAuthAudienceKey),
 	}, l)
 	if err != nil {
@@ -167,6 +171,8 @@ func CreateMCPServer(log *logger.ConduitLogger, mcpAddr string, clientCert *tls.
 		supportedScopes:         supportedScopes,
 		resourceURL:             resourceURL,
 		resourceMetadataURL:     resourceMetadataURL,
+		resourcePath:            resourcePath,
+		resourceMetadataPath:    resourceMetadataPath,
 		tokenExpirationFallback: fallbackTTL,
 		conduitClient:           conduitClient,
 		conduitClientConn:       conn,
@@ -219,7 +225,7 @@ func (m *MCPServer) registerMCPRoutes() {
 	}
 
 	m.mux.Handle(
-		"/.well-known/oauth-protected-resource",
+		m.resourceMetadataPath,
 		mcpauth.ProtectedResourceMetadataHandler(metadata),
 	)
 
@@ -249,7 +255,7 @@ func (m *MCPServer) registerMCPRoutes() {
 		authMiddleware(handler).ServeHTTP(w, r)
 	})
 
-	m.mux.Handle("/mcp", loggedHandler)
+	m.mux.Handle(m.resourcePath, loggedHandler)
 }
 
 func (m *MCPServer) StartMCPServer() error {
