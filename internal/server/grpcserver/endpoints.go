@@ -1019,11 +1019,15 @@ func (s *ConduitServer) TransferNotify(notifyRequest *proto.NotifyRequest, strea
 
 	// check for each transfer id, check if there is already a key for it in the activestreams map and add it if it isn't
 	if _, ok := s.userStreams[user]; !ok {
-		streamMap := make(map[uuid.UUID]chan *proto.NotifyMessage)
-		s.userStreams[user] = streamMap
+		s.userStreams[user] = make(map[uuid.UUID]*userStream)
 	}
+
 	uChan := make(chan *proto.NotifyMessage, 1)
-	s.userStreams[user][streamID] = uChan
+
+	s.userStreams[user][streamID] = &userStream{
+		ch:   uChan,
+		done: stream.Context().Done(),
+	}
 
 	s.usMutex.Unlock()
 

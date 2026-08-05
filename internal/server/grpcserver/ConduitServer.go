@@ -81,8 +81,8 @@ type ConduitServer struct {
 	activeStreams map[uuid.UUID]map[uuid.UUID]chan bool // key: transferID value: (key: streamID value: stream)
 	asMutex       sync.RWMutex                          // lock for activeStreams map
 
-	userStreams map[string]map[uuid.UUID]chan *proto.NotifyMessage // key: username value: (key: streamID value: notifyMessage)
-	usMutex     sync.RWMutex                                       // lock for userStreams map
+	userStreams map[string]map[uuid.UUID]*userStream // key: username value: (key: streamID value: userStream)
+	usMutex     sync.RWMutex                         // lock for userStreams map
 
 	log *logger.ConduitLogger
 
@@ -305,7 +305,7 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 		grpcAddr:       grpcAddr,
 		activeStreams:  make(map[uuid.UUID]map[uuid.UUID]chan bool),
 		asMutex:        sync.RWMutex{},
-		userStreams:    make(map[string]map[uuid.UUID]chan *proto.NotifyMessage),
+		userStreams:    make(map[string]map[uuid.UUID]*userStream),
 		usMutex:        sync.RWMutex{},
 		serverState:    proto.ServerState_SERVER_STARTING,
 		usersErrants:   make(map[string]map[string]*timestamppb.Timestamp),
@@ -584,9 +584,10 @@ func (s *ConduitServer) cacheErrors(successChan chan bool) {
 // handleTransferEvents gets called whenever an event is passed to the transfer watch channel
 func (s *ConduitServer) handleTransferEvents(evs []*clientv3.Event) {
 	eventTransfers := make(map[uuid.UUID]bool)
-	eventUsers := make(map[string]*proto.NotifyMessage)
+	eventUsers := make(map[string][]*proto.NotifyMessage)
+
 	s.tMutex.Lock()
-	defer s.tMutex.Unlock()
+
 	for _, ev := range evs {
 		id, _, err := proto.ParseETCDTransfersKey(string(ev.Kv.Key))
 		if err != nil {
@@ -598,8 +599,7 @@ func (s *ConduitServer) handleTransferEvents(evs []*clientv3.Event) {
 		case mvccpb.PUT:
 			// if this transfer doesn't exist, create it
 			if _, ok := s.transfers[id.String()]; !ok {
-				t := &proto.TransferDetails{TransferID: id.String()}
-				s.transfers[id.String()] = t
+				s.transfers[id.String()] = &proto.TransferDetails{TransferID: id.String()}
 			}
 
 			td, err := etcd.ParseETCDTransfer(id, []*mvccpb.KeyValue{ev.Kv}, s.transfers[id.String()])
@@ -611,47 +611,66 @@ func (s *ConduitServer) handleTransferEvents(evs []*clientv3.Event) {
 			s.transfers[id.String()] = td
 
 			// add transfer to userstransfers
+			if _, ok := s.usersTransfers[td.GetUser()]; !ok {
+				s.usersTransfers[td.GetUser()] = make(map[uuid.UUID]bool)
+			}
+
 			if _, ok := s.usersTransfers[td.GetUser()][id]; !ok {
-				if len(s.usersTransfers[td.GetUser()]) == 0 {
-					s.usersTransfers[td.GetUser()] = make(map[uuid.UUID]bool)
-				}
 				s.usersTransfers[td.GetUser()][id] = true
-				eventUsers[td.GetUser()] = &proto.NotifyMessage{
-					TransferID: id.String(),
-					Created:    true,
-				}
+
+				eventUsers[td.GetUser()] = append(
+					eventUsers[td.GetUser()],
+					&proto.NotifyMessage{
+						TransferID: id.String(),
+						Created:    true,
+					},
+				)
 			}
 
 		case mvccpb.DELETE:
-			// if this transfer exists in s.transfers, delete it from s.transfers and s.userstransfers
+			// Delete the transfer from both caches if it exists.
 			if td, ok := s.transfers[id.String()]; ok {
+				user := td.GetUser()
 
-				// if transfer in s.userstransfers, delete it
-				delete(s.usersTransfers[td.GetUser()], id)
-				eventUsers[td.GetUser()] = &proto.NotifyMessage{
-					TransferID: id.String(),
-					Created:    false,
+				delete(s.usersTransfers[user], id)
+
+				if len(s.usersTransfers[user]) == 0 {
+					delete(s.usersTransfers, user)
 				}
+
+				eventUsers[user] = append(
+					eventUsers[user],
+					&proto.NotifyMessage{
+						TransferID: id.String(),
+						Created:    false,
+					},
+				)
 
 				delete(s.transfers, id.String())
 
 				s.log.Debugf("deleted transfer[%v] from server cache", id.String())
 			}
+
 		default:
 			s.log.Errorf("found unknown type of etcd event: %s", ev.Type.String())
 		}
 
-		// add this transfer id to the eventTransfers map to send an update to any streams watching this transfer
+		// Notify streams watching this specific transfer.
 		eventTransfers[id] = true
 	}
 
-	// // tell any clients that are listening on streams that there was an update
-	// s.log.Debugf("sending updates for transfers: %+v", eventTransfers)
+	s.tMutex.Unlock()
+
 	for tid := range eventTransfers {
 		go s.updateTransferStreams(tid)
 	}
-	for user, nm := range eventUsers {
-		go s.updateUserStreams(user, nm)
+
+	for user, messages := range eventUsers {
+		go func(user string, messages []*proto.NotifyMessage) {
+			for _, message := range messages {
+				s.updateUserStreams(user, message)
+			}
+		}(user, messages)
 	}
 }
 
@@ -695,32 +714,6 @@ func (s *ConduitServer) handleErrantEvents(evs []*clientv3.Event) {
 			}
 		default:
 			s.log.Errorf("found unknown type of etcd event: %s", ev.Type.String())
-		}
-	}
-}
-
-func (s *ConduitServer) updateTransferStreams(transferID uuid.UUID) {
-	s.asMutex.RLock()
-	defer s.asMutex.RUnlock()
-
-	for _, streamChan := range s.activeStreams[transferID] {
-		// NOTE: this will block if nobody is listening to the channel
-		streamChan <- true
-	}
-}
-
-func (s *ConduitServer) updateUserStreams(user string, nm *proto.NotifyMessage) {
-	s.usMutex.RLock()
-	defer s.usMutex.RUnlock()
-
-	for _, streamChan := range s.userStreams[user] {
-		select {
-		case streamChan <- nm:
-		default:
-			s.log.Warnf(
-				"dropping notification for slow user stream: user=%q",
-				user,
-			)
 		}
 	}
 }
