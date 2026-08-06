@@ -137,7 +137,3 @@ docker run -d \
   -v /path/to/certs:/etc/conduit/keys:ro \
   conduit-mcp:latest
 ```
-
-### Docker Compose
-
-See [`examples/mcp/docker-compose.yaml`](../../examples/mcp/docker-compose.yaml) for a complete example with Zitadel authentication.
