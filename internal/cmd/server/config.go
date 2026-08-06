@@ -54,8 +54,9 @@ const (
 	DefaultConcurrentWatchDogs  = 2
 	DefaultConcurrentSchedulers = 2
 
-	DefaultHTTPEnabled = false
-	DefaultHTTPPort    = 8080
+	DefaultHTTPEnabled  = false
+	DefaultHTTPPort     = 8080
+	DefaultHTTPAuthMode = "oauth"
 )
 
 var (
@@ -141,6 +142,11 @@ func initConfig(cfgFile string) {
 	// binds to an environment variable STING_NUMBER. This helps
 	// avoid conflicts.
 	viper.SetEnvPrefix(envPrefix)
+
+	viper.SetEnvKeyReplacer(strings.NewReplacer(
+		".", "_",
+		"-", "_",
+	))
 
 	// Bind to environment variables
 	// Works great for simple config names, but needs help for names
@@ -236,6 +242,7 @@ func createDefaultConfig() {
 	viper.SetDefault(defaults.ConfigServerHTTPEnabledKey, DefaultHTTPEnabled)
 	viper.SetDefault(defaults.ConfigServerHTTPPortKey, DefaultHTTPPort)
 	viper.SetDefault(defaults.ConfigServerHTTPAllowedOriginsKey, DefaultAllowedOrigins)
+	viper.SetDefault(defaults.ConfigServerHTTPAuthModeKey, DefaultHTTPAuthMode)
 
 	viper.SetDefault(defaults.ConfigOAuthUserFallbackKey, defaults.DefaultOAuthUserFallback)
 	viper.SetDefault(defaults.ConfigOAuthUserClaimsKey, defaults.DefaultUsernameClaims)

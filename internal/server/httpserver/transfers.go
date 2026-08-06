@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lanl/conduit/api"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -47,7 +48,7 @@ func (h *HTTPServer) queryTransfersByIDList(wr http.ResponseWriter, req *http.Re
 		return
 	}
 
-	writeProto(wr, mtd)
+	writeProto(wr, req, mtd)
 }
 
 // POST "/transfers/query"
@@ -75,7 +76,7 @@ func (h *HTTPServer) queryTransfers(wr http.ResponseWriter, req *http.Request, u
 		return
 	}
 
-	writeProto(wr, mtd)
+	writeProto(wr, req, mtd)
 }
 
 // POST "/transfers/{transferID}/abort"
@@ -123,7 +124,7 @@ func (h *HTTPServer) abortTransferIDList(wr http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	writeProto(wr, mtd)
+	writeProto(wr, req, mtd)
 }
 
 // POST "/transfers"
@@ -150,10 +151,43 @@ func (h *HTTPServer) startTransfer(wr http.ResponseWriter, req *http.Request, us
 		return
 	}
 
-	writeProto(wr, mtd)
+	writeProto(wr, req, mtd)
 }
 
-func writeProto(wr http.ResponseWriter, msg proto.Message) {
+// writeResponse writes the response in the format requested by the client via Accept header
+// Supports application/json (default) and application/x-protobuf
+func writeProto(wr http.ResponseWriter, req *http.Request, msg proto.Message) {
+	accept := req.Header.Get("Accept")
+
+	// Check if client explicitly wants Protobuf
+	if strings.Contains(accept, "application/x-protobuf") || strings.Contains(accept, "application/protobuf") {
+		writeProtobuf(wr, msg)
+		return
+	}
+
+	// Default to JSON (more user-friendly for HTTP APIs)
+	writeJSON(wr, msg)
+}
+
+func writeJSON(wr http.ResponseWriter, msg proto.Message) {
+	// Use protojson for proper proto3 JSON encoding
+	marshaler := protojson.MarshalOptions{
+		EmitUnpopulated: true,
+		UseProtoNames:   true,
+	}
+
+	b, err := marshaler.Marshal(msg)
+	if err != nil {
+		http.Error(wr, fmt.Sprintf("failed to marshal JSON response: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	wr.Header().Set("Content-Type", "application/json")
+	wr.WriteHeader(http.StatusOK)
+	_, _ = wr.Write(b)
+}
+
+func writeProtobuf(wr http.ResponseWriter, msg proto.Message) {
 	b, err := proto.Marshal(msg)
 	if err != nil {
 		http.Error(wr, fmt.Sprintf("failed to marshal protobuf response: %v", err), http.StatusInternalServerError)

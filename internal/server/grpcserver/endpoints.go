@@ -368,7 +368,7 @@ func (s *ConduitServer) Query(ctx context.Context, qo *proto.QueryOptions) (*pro
 		return nil, fmt.Errorf("provided query contains an invalid key: %v\npossible keys: %v", err, queryFields)
 	}
 
-	s.log.Debugf("get transfers by user")
+	s.log.Debugf("get transfers for user [%v]", user)
 
 	s.tMutex.RLock()
 	defer s.tMutex.RUnlock()

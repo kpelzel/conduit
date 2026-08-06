@@ -60,16 +60,24 @@ rqlite:
     ip: 192.168.20.33
     port: 4001
 server:
-  hostname: conduit-server.example.com
+  hostname:
+    - conduit-server.example.com
   ip:
     - 192.168.20.3
     - 172.18.0.10
   port: 23456
-  ws-port: 8080
+  http:
+    enabled: true
+    port: 8080
+    auth-mode: mtls
+    allowed-origins:
+      - "http://localhost:3000"
+      - "http://localhost:8080"
+      - "https://conduit.example.com"
   concurrency:
     schedulers: 2
     watchdogs: 2
-    transfer-Workers: 2
+    transfer-workers: 2
 test: false
 transfer:
   expiry-advance: 60s

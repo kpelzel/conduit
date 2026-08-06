@@ -56,54 +56,73 @@ func CreateHTTPServer(
 
 	router := http.NewServeMux()
 
-	discoveryURL := viper.GetString(defaults.ConfigOAuthDiscoveryKey)
-	clientID := viper.GetString(defaults.ConfigOAuthclientIDKey)
-	clientSecret := viper.GetString(defaults.ConfigOAuthclientSecretKey)
-	userInfoFallback := viper.GetBool(defaults.ConfigOAuthUserFallbackKey)
-	usernameClaims := viper.GetStringSlice(defaults.ConfigOAuthUserClaimsKey)
-	introspectionAuthMethod := viper.GetString(defaults.ConfigOAuthIntrospectionAuthMethodKey)
+	// Get auth mode configuration
+	authMode := viper.GetString(defaults.ConfigServerHTTPAuthModeKey)
+	l.Infof("HTTP authentication mode: %s", authMode)
 
-	if discoveryURL == "" {
-		return nil, fmt.Errorf("OAuth discovery URL is required")
+	// Validate auth mode
+	validAuthModes := map[string]bool{
+		"oauth":         true,
+		"mtls":          true,
+		"oauth-or-mtls": true,
 	}
-	if clientID == "" {
-		return nil, fmt.Errorf("OAuth client ID is required")
-	}
-	if clientSecret == "" {
-		return nil, fmt.Errorf("OAuth client secret is required")
+	if !validAuthModes[authMode] {
+		return nil, fmt.Errorf("invalid auth-mode '%s': must be 'oauth', 'mtls', or 'oauth-or-mtls'", authMode)
 	}
 
-	authCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	var validator *auth.Introspector
 
-	oauthCertPool, err := cliutil.GetCertPoolFromViper(
-		defaults.ConfigOAuthCAKey,
-	)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to load OAuth CA certificate: %w",
-			err,
+	// Only initialize OAuth validator if OAuth is being used
+	if authMode == "oauth" || authMode == "oauth-or-mtls" {
+		discoveryURL := viper.GetString(defaults.ConfigOAuthDiscoveryKey)
+		clientID := viper.GetString(defaults.ConfigOAuthclientIDKey)
+		clientSecret := viper.GetString(defaults.ConfigOAuthclientSecretKey)
+		userInfoFallback := viper.GetBool(defaults.ConfigOAuthUserFallbackKey)
+		usernameClaims := viper.GetStringSlice(defaults.ConfigOAuthUserClaimsKey)
+		introspectionAuthMethod := viper.GetString(defaults.ConfigOAuthIntrospectionAuthMethodKey)
+
+		if discoveryURL == "" {
+			return nil, fmt.Errorf("OAuth discovery URL is required when using OAuth authentication")
+		}
+		if clientID == "" {
+			return nil, fmt.Errorf("OAuth client ID is required when using OAuth authentication")
+		}
+		if clientSecret == "" {
+			return nil, fmt.Errorf("OAuth client secret is required when using OAuth authentication")
+		}
+
+		authCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		oauthCertPool, err := cliutil.GetCertPoolFromViper(
+			defaults.ConfigOAuthCAKey,
 		)
-	}
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to load OAuth CA certificate: %w",
+				err,
+			)
+		}
 
-	oauthTLSConfig := &tls.Config{
-		RootCAs:    oauthCertPool,
-		MinVersion: tls.VersionTLS12,
-	}
+		oauthTLSConfig := &tls.Config{
+			RootCAs:    oauthCertPool,
+			MinVersion: tls.VersionTLS12,
+		}
 
-	validator, err := auth.NewIntrospector(authCtx, auth.Config{
-		DiscoveryURL:                 discoveryURL,
-		ClientID:                     clientID,
-		ClientSecret:                 clientSecret,
-		UsernameClaims:               usernameClaims,
-		UseUserInfoFallback:          userInfoFallback,
-		TLSConfig:                    oauthTLSConfig,
-		ViperIntrospectionAuthMethod: introspectionAuthMethod,
-		// does the IdP return aud?
-		// ExpectedAudience: "conduit",
-	}, l)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create http validator: %v", err)
+		validator, err = auth.NewIntrospector(authCtx, auth.Config{
+			DiscoveryURL:                 discoveryURL,
+			ClientID:                     clientID,
+			ClientSecret:                 clientSecret,
+			UsernameClaims:               usernameClaims,
+			UseUserInfoFallback:          userInfoFallback,
+			TLSConfig:                    oauthTLSConfig,
+			ViperIntrospectionAuthMethod: introspectionAuthMethod,
+			// does the IdP return aud?
+			// ExpectedAudience: "conduit",
+		}, l)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create http validator: %v", err)
+		}
 	}
 
 	conn, conduitClient, err := GetGRPCClient(l, clientCert, certPool, grpcAddr)
@@ -121,7 +140,7 @@ func CreateHTTPServer(
 		originPolicy:      originPolicy,
 	}
 
-	h.registerHTTPRoutes(router)
+	h.registerHTTPRoutes(router, authMode)
 
 	corsHandler := handlers.CORS(
 		handlers.AllowedOrigins(originPolicy.CORSOrigins()),
@@ -147,47 +166,85 @@ func CreateHTTPServer(
 	return h, nil
 }
 
-func (h *HTTPServer) StartHTTPServer() error {
+func (h *HTTPServer) StartHTTPServer(authMode string, certPool *x509.CertPool, serverCert *tls.Certificate) error {
 	defer h.conduitClientConn.Close()
-	h.log.Infof("HTTP server listening on %s", h.addr)
+	h.log.Infof("HTTP server listening on %s with TLS enabled", h.addr)
 
-	if err := h.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	// Configure TLS for all modes
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{*serverCert},
+		MinVersion:   tls.VersionTLS12,
+	}
+
+	// Configure client certificate requirements based on auth mode
+	switch authMode {
+	case "mtls":
+		h.log.Infof("mTLS mode: requiring client certificates")
+		tlsConfig.ClientCAs = certPool
+		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+	case "oauth-or-mtls":
+		h.log.Infof("OAuth-or-mTLS mode: client certificates optional")
+		tlsConfig.ClientCAs = certPool
+		tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
+	case "oauth":
+		h.log.Infof("OAuth mode: client certificates not required")
+		tlsConfig.ClientAuth = tls.NoClientCert
+	default:
+		return fmt.Errorf("unsupported http auth mode: %v", authMode)
+	}
+
+	h.server.TLSConfig = tlsConfig
+
+	// Always use TLS
+	if err := h.server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("server error: %w", err)
 	}
 
 	return nil
 }
 
-func (h *HTTPServer) registerHTTPRoutes(router *http.ServeMux) {
-	router.Handle("GET /ws", h.authedHandler(h.serveWs))
+func (h *HTTPServer) registerHTTPRoutes(router *http.ServeMux, authMode string) {
+	router.Handle("GET /ws", h.authedHandler(h.serveWs, authMode))
 
-	router.Handle("GET /transfers", h.authedHandler(h.getTransfers))
-	router.Handle("POST /transfers", h.authedHandler(h.startTransfer))
+	router.Handle("GET /transfers", h.authedHandler(h.getTransfers, authMode))
+	router.Handle("POST /transfers", h.authedHandler(h.startTransfer, authMode))
 
-	router.Handle("GET /transfers/{transferID}", h.authedHandler(h.getTransferByID))
-	router.Handle("POST /transfers/query", h.authedHandler(h.queryTransfers))
-	router.Handle("POST /transfers/abort", h.authedHandler(h.abortTransfers))
-	router.Handle("POST /transfers/{transferID}/abort", h.authedHandler(h.abortTransfer))
+	router.Handle("GET /transfers/{transferID}", h.authedHandler(h.getTransferByID, authMode))
+	router.Handle("POST /transfers/query", h.authedHandler(h.queryTransfers, authMode))
+	router.Handle("POST /transfers/abort", h.authedHandler(h.abortTransfers, authMode))
+	router.Handle("POST /transfers/{transferID}/abort", h.authedHandler(h.abortTransfer, authMode))
 }
 
-func (h *HTTPServer) authedHandler(next func(http.ResponseWriter, *http.Request, string)) http.Handler {
-	return auth.RequireBearer(
-		h.validator,
-		auth.ValidateOptions{},
-		http.HandlerFunc(func(wr http.ResponseWriter, req *http.Request) {
-			req.Body = http.MaxBytesReader(wr, req.Body, 1<<20) // 1 MiB
-			defer req.Body.Close()
+func (h *HTTPServer) authedHandler(next func(http.ResponseWriter, *http.Request, string), authMode string) http.Handler {
+	var middleware http.Handler
 
-			username, ok := auth.UsernameFromRequest(req)
-			if !ok {
-				http.Error(wr, "missing authenticated user", http.StatusInternalServerError)
-				return
-			}
+	handler := http.HandlerFunc(func(wr http.ResponseWriter, req *http.Request) {
+		req.Body = http.MaxBytesReader(wr, req.Body, 1<<20) // 1 MiB
+		defer req.Body.Close()
 
-			next(wr, req, username)
-		}),
-	)
+		username, ok := auth.UsernameFromRequest(req)
+		if !ok {
+			http.Error(wr, "missing authenticated user", http.StatusInternalServerError)
+			return
+		}
 
+		next(wr, req, username)
+	})
+
+	// Apply the appropriate authentication middleware based on auth mode
+	switch authMode {
+	case "oauth":
+		middleware = auth.RequireBearer(h.validator, auth.ValidateOptions{}, handler)
+	case "mtls":
+		middleware = auth.RequireMTLS(handler)
+	case "oauth-or-mtls":
+		middleware = auth.RequireBearerOrMTLS(h.validator, auth.ValidateOptions{}, handler)
+	default:
+		// Should not reach here due to validation in CreateHTTPServer
+		middleware = handler
+	}
+
+	return middleware
 }
 
 // getGRPCClient authenticates with kerberos, dials into the conduit server, and returns a ConduitApiClient

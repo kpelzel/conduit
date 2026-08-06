@@ -67,6 +67,11 @@ func initConfig(cfgFile string) {
 	// avoid conflicts.
 	viper.SetEnvPrefix(envPrefix)
 
+	viper.SetEnvKeyReplacer(strings.NewReplacer(
+		".", "_",
+		"-", "_",
+	))
+
 	// Bind to environment variables
 	// Works great for simple config names, but needs help for names
 	// like --favorite-color which we fix in the bindFlags function

@@ -49,7 +49,7 @@ const (
 )
 
 var (
-	privilegedServices = []string{"conduit-service"}
+	privilegedServices = []string{"conduit-service", "conduit-http"}
 	privilegedAdmins   = []string{"conduit-admin"}
 	queryFields        = []string{}
 	adminWarning       = "This transfer has been manipulated by an admin"
@@ -175,6 +175,11 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 			return nil, fmt.Errorf("failed to parse ip from string: %v", sips)
 		}
 		serverIPs = append(serverIPs, sip)
+	}
+	// If multiple IPs are configured, the server will listen on 0.0.0.0
+	// so we need to add it to the certificate
+	if len(serverIPs) > 1 {
+		serverIPs = append(serverIPs, net.IPv4(0, 0, 0, 0))
 	}
 	serverHostnames := viper.GetStringSlice(defaults.ConfigServerHostnameKey)
 
@@ -426,8 +431,20 @@ func (s *ConduitServer) StartConduitServer(clearEtcd bool) error {
 
 	// TODO: monitor these go routines to watch if they crash
 	if s.httpServer != nil {
+		authMode := viper.GetString(defaults.ConfigServerHTTPAuthModeKey)
+		exCertPool, err := s.cm.GetCertPool(cert.EXTERNAL)
+		if err != nil {
+			return fmt.Errorf("failed to get external cert pool for HTTP server: %v", err)
+		}
+
+		// Get server certificate for TLS
+		serverCert, err := s.cm.ExternalCertManager.GetServerTLSCert()
+		if err != nil {
+			return fmt.Errorf("failed to get server TLS cert for HTTP server: %v", err)
+		}
+
 		go func() {
-			err := s.httpServer.StartHTTPServer()
+			err := s.httpServer.StartHTTPServer(authMode, exCertPool, serverCert)
 			if err != nil {
 				s.log.Errorf("failed to start http server: %v", err)
 			}
