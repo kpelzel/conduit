@@ -35,13 +35,7 @@ type HTTPServer struct {
 	originPolicy *OriginPolicy
 }
 
-func CreateHTTPServer(
-	log *logger.ConduitLogger,
-	addr string,
-	clientCert *tls.Certificate,
-	certPool *x509.CertPool,
-	grpcAddr string,
-) (*HTTPServer, error) {
+func CreateHTTPServer(log *logger.ConduitLogger, addr string, clientCert *tls.Certificate, certPool *x509.CertPool, grpcAddr string) (*HTTPServer, error) {
 	l := logger.NewConduitLogger(log.GetLevel(), fmt.Sprintf("%sHTTP server:", log.GetPrefix()))
 	if log.GetPrefix() == "" {
 		l = logger.NewConduitLogger(log.GetLevel(), "HTTP server:")
@@ -80,6 +74,7 @@ func CreateHTTPServer(
 		userInfoFallback := viper.GetBool(defaults.ConfigOAuthUserFallbackKey)
 		usernameClaims := viper.GetStringSlice(defaults.ConfigOAuthUserClaimsKey)
 		introspectionAuthMethod := viper.GetString(defaults.ConfigOAuthIntrospectionAuthMethodKey)
+		expectedAudience := viper.GetString(defaults.ConfigOAuthAudienceKey)
 
 		if discoveryURL == "" {
 			return nil, fmt.Errorf("OAuth discovery URL is required when using OAuth authentication")
@@ -117,8 +112,7 @@ func CreateHTTPServer(
 			UseUserInfoFallback:          userInfoFallback,
 			TLSConfig:                    oauthTLSConfig,
 			ViperIntrospectionAuthMethod: introspectionAuthMethod,
-			// does the IdP return aud?
-			// ExpectedAudience: "conduit",
+			ExpectedAudience:             expectedAudience,
 		}, l)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create http validator: %v", err)

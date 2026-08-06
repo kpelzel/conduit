@@ -68,7 +68,7 @@ func createDefaultConfig() {
 	viper.SetDefault(defaults.ConfigMCPPublicBaseURLKey, "")
 	viper.SetDefault(defaults.ConfigMCPResourcePathKey, mcp.DefaultResourcePath)
 	viper.SetDefault(defaults.ConfigMCPResourceMetadataPathKey, mcp.DefaultMetadataPath)
-	viper.SetDefault(defaults.ConfigServerHTTPAllowedOriginsKey, []string{"*"})
+	viper.SetDefault(defaults.ConfigServerHTTPAllowedOriginsKey, []string{})
 
 	// conduit config
 	viper.SetDefault(defaults.ConfigConduitIPKey, defaults.DefaultConduitHost)

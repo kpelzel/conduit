@@ -241,6 +241,11 @@ func (m *MCPServer) registerMCPRoutes() {
 		m.log.Infof("=== Incoming MCP Request ===")
 		m.log.Infof("Method: %s %s", r.Method, r.URL.Path)
 
+		if !m.originPolicy.CheckRequestOrigin(r) {
+			http.Error(w, "forbidden origin", http.StatusForbidden)
+			return
+		}
+
 		for k, v := range r.Header {
 			if strings.EqualFold(k, "Authorization") {
 				m.log.Debugf("Header: %s=%v", k, []string{fmt.Sprintf("Bearer <redacted> (%v)", len(v))})

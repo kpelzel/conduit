@@ -35,10 +35,6 @@ func NewOriginPolicy(log *logger.ConduitLogger, rawOrigins []string) (*OriginPol
 		origins = append(origins, origin)
 	}
 
-	if len(origins) == 0 {
-		return nil, fmt.Errorf("at least one valid allowed origin is required")
-	}
-
 	return &OriginPolicy{
 		log:     log,
 		origins: origins,
@@ -102,4 +98,33 @@ func normalizeOrigin(raw string) (string, error) {
 	}
 
 	return strings.ToLower(u.Scheme + "://" + u.Host), nil
+}
+
+func (p *OriginPolicy) CheckRequestOrigin(r *http.Request) bool {
+	raw := strings.TrimSpace(r.Header.Get("Origin"))
+
+	// Server-side MCP clients and curl normally omit Origin.
+	if raw == "" {
+		return true
+	}
+
+	origin, err := normalizeOrigin(raw)
+	if err != nil {
+		p.log.Warnf(
+			"rejecting request with invalid origin %q: %v",
+			raw,
+			err,
+		)
+		return false
+	}
+
+	_, ok := p.allowed[origin]
+	if !ok {
+		p.log.Warnf(
+			"rejecting request from origin %q",
+			origin,
+		)
+	}
+
+	return ok
 }
