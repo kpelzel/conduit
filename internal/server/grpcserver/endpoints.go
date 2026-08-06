@@ -1075,20 +1075,10 @@ func (s *ConduitServer) TransferNotify(notifyRequest *proto.NotifyRequest, strea
 		case nm := <-uChan:
 			err := stream.Send(nm)
 			if err != nil {
-				s.log.Errorf("failed to send notify message to grpc stream[%v]: %v", streamID, err)
+				return fmt.Errorf("failed to send notify message to grpc stream[%v]: %v", streamID, err)
 			}
 		case <-stream.Context().Done():
 			s.log.Debugf("notify stream[%v] is closed", streamID)
-
-			s.usMutex.Lock()
-
-			delete(s.userStreams[user], streamID)
-			if len(s.userStreams[user]) == 0 {
-				delete(s.userStreams, user)
-			}
-
-			s.usMutex.Unlock()
-
 			return stream.Context().Err()
 		}
 	}

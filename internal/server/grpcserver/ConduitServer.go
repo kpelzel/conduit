@@ -177,11 +177,6 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 		}
 		serverIPs = append(serverIPs, sip)
 	}
-	// If multiple IPs are configured, the server will listen on 0.0.0.0
-	// so we need to add it to the certificate
-	if len(serverIPs) > 1 {
-		serverIPs = append(serverIPs, net.IPv4(0, 0, 0, 0))
-	}
 	serverHostnames := viper.GetStringSlice(defaults.ConfigServerHostnameKey)
 
 	icm, err := cert.NewInternalCertManager(log, internalCACertPath, internalCAKeyPath, nil, nil)
@@ -257,18 +252,21 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 
 	// Create the main listener.
 	port := viper.GetInt(defaults.ConfigServerPortKey)
-	serverIP := net.ParseIP(serverIPStrings[0])
+
+	grpcListenIP := net.ParseIP(serverIPStrings[0])
 	if len(serverIPStrings) > 1 {
-		serverIP = net.IPv4(0, 0, 0, 0)
+		grpcListenIP = net.IPv4zero
 	}
 
-	grpcAddr := net.JoinHostPort(serverIP.String(), strconv.Itoa(port))
+	grpcListenAddr := net.JoinHostPort(grpcListenIP.String(), strconv.Itoa(port))
+	grpcDialAddr := net.JoinHostPort(serverHostnames[0], strconv.Itoa(port))
+
 	var httpServer *httpserver.HTTPServer
 
 	httpEnabled := viper.GetBool(defaults.ConfigServerHTTPEnabledKey)
 	if httpEnabled {
 		httpPort := viper.GetInt(defaults.ConfigServerHTTPPortKey)
-		httpAddr := net.JoinHostPort(serverIP.String(), strconv.Itoa(httpPort))
+		httpAddr := net.JoinHostPort(grpcListenIP.String(), strconv.Itoa(httpPort))
 
 		_, httpCreds, err := cm.ExternalCertManager.GetClientCreds(HTTP_CERT_NAME, time.Now().AddDate(10, 0, 0))
 		if err != nil {
@@ -280,7 +278,7 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 			return nil, fmt.Errorf("failed to get external cert pool: %v", err)
 		}
 
-		httpServer, err = httpserver.CreateHTTPServer(log, httpAddr, httpCreds, exCertPool, grpcAddr)
+		httpServer, err = httpserver.CreateHTTPServer(log, httpAddr, httpCreds, exCertPool, grpcDialAddr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create http server: %v", err)
 		}
@@ -308,7 +306,7 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 		grpcServer:         grpcServer,
 		httpServer:         httpServer,
 		healthServer:       healthServer,
-		grpcAddr:           grpcAddr,
+		grpcAddr:           grpcListenAddr,
 		activeStreams:      make(map[uuid.UUID]map[uuid.UUID]chan bool),
 		asMutex:            sync.RWMutex{},
 		userStreams:        make(map[string]map[uuid.UUID]*userStream),
