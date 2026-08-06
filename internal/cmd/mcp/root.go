@@ -72,7 +72,10 @@ var (
 				log.Fatalf("failed to create mcp server: %v", err)
 			}
 
-			mcpServer.StartMCPServer()
+			err = mcpServer.StartMCPServer()
+			if err != nil {
+				log.Fatalf("failed to run mcp server: %v", err)
+			}
 
 			os.Exit(0)
 		},

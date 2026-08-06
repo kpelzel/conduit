@@ -150,8 +150,7 @@ func (m *MCPServer) startTransfer(ctx context.Context, req *mcpsdk.CallToolReque
 		case int64:
 			anyValue, err = anypb.New(wrapperspb.Int64(v))
 		default:
-			m.log.Warnf("unsupported option type for key %s: %T, skipping", key, v)
-			continue
+			return nil, nil, fmt.Errorf("unsupported option %q with type %T", key, value)
 		}
 
 		if err != nil {

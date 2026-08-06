@@ -269,7 +269,7 @@ func (v *Introspector) validatePrincipal(p *Principal, opts ValidateOptions) err
 	}
 
 	if expectedAudience != "" && !contains(p.Audiences, expectedAudience) {
-		return fmt.Errorf("invalid audience")
+		return fmt.Errorf("invalid audience: %v", p.Audiences)
 	}
 
 	return nil

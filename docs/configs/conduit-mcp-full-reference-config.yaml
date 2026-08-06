@@ -39,8 +39,10 @@ oauth:
   # a list of claims that contain the username. Conduit will use the first claim in this list that contains text
   username-claims:
     - preferred_username
-  # optional ca used specifically for oauth
+  # path to the CA certificate used to verify the OAuth provider's TLS certificate
   ca: ""
+  # set this to the audience assigned by the OAuth provider for Conduit
+  expected-audience: ""
 server:
   # the ip address that the mcp server will listen on
   ip: 127.0.0.1

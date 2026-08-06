@@ -103,21 +103,14 @@ func CreateMCPServer(log *logger.ConduitLogger, mcpAddr string, clientCert *tls.
 	}
 
 	validator, err := conduitauth.NewIntrospector(authCtx, conduitauth.Config{
-		DiscoveryURL: discoveryURL,
-
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-
-		UsernameClaims: usernameClaims,
-
-		UseUserInfoFallback: userInfoFallback,
-
-		TLSConfig: tlsConfig,
-
+		DiscoveryURL:                 discoveryURL,
+		ClientID:                     clientID,
+		ClientSecret:                 clientSecret,
+		UsernameClaims:               usernameClaims,
+		UseUserInfoFallback:          userInfoFallback,
+		TLSConfig:                    tlsConfig,
 		ViperIntrospectionAuthMethod: introspectionAuthMethod,
-
-		// TODO: Keep audience here if you already have a shared config key.
-		// ExpectedAudience: viper.GetString(defaults.ConfigOAuthAudienceKey),
+		ExpectedAudience:             viper.GetString(defaults.ConfigOAuthAudienceKey),
 	}, l)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP OAuth validator: %w", err)
@@ -200,6 +193,7 @@ func CreateMCPServer(log *logger.ConduitLogger, mcpAddr string, clientCert *tls.
 			http.MethodGet,
 			http.MethodPost,
 			http.MethodOptions,
+			http.MethodDelete,
 		}),
 	)(mux)
 
@@ -231,7 +225,9 @@ func (m *MCPServer) registerMCPRoutes() {
 
 	handler := mcpsdk.NewStreamableHTTPHandler(func(req *http.Request) *mcpsdk.Server {
 		return m.mcpServer
-	}, nil)
+	}, &mcpsdk.StreamableHTTPOptions{
+		SessionTimeout: 30 * time.Minute,
+	})
 
 	authMiddleware := mcpauth.RequireBearerToken(
 		m.verifyToken,

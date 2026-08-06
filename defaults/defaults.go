@@ -92,6 +92,7 @@ const (
 	ConfigOAuthIntrospectionAuthMethodKey = "oauth.introspection-auth-method" // used by mcp
 	ConfigOAuthTokenFallbackTTLKey        = "oauth.token-fallback-ttl"        // used by mcp
 	ConfigOAuthCAKey                      = "oauth.ca"                        // CA certificate for OAuth provider TLS verification
+	ConfigOAuthAudienceKey                = "oauth.expected-audience"
 
 	// MCP config keys
 	ConfigMCPPublicBaseURLKey        = "server.public-url"
