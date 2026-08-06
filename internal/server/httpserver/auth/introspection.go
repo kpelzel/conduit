@@ -332,8 +332,6 @@ func (v *Introspector) enrichFromUserInfo(ctx context.Context, rawToken string, 
 		p.Username = firstStringClaim(claims, v.cfg.UsernameClaims)
 	}
 
-	v.log.Debugf("claims: %+v", p.Claims)
-
 	return nil
 }
 

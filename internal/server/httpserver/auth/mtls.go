@@ -3,17 +3,12 @@
 package auth
 
 import (
-	"crypto/x509"
 	"fmt"
 	"net/http"
 )
 
 // AuthenticateMTLSRequest extracts the username from the client certificate's Common Name
 func AuthenticateMTLSRequest(r *http.Request) (*Principal, error) {
-	if r.TLS == nil {
-		return nil, fmt.Errorf("no TLS connection")
-	}
-
 	if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 || len(r.TLS.VerifiedChains[0]) == 0 {
 		return nil, fmt.Errorf("no verified client certificate provided")
 	}
@@ -25,11 +20,6 @@ func AuthenticateMTLSRequest(r *http.Request) (*Principal, error) {
 	username := cert.Subject.CommonName
 	if username == "" {
 		return nil, fmt.Errorf("certificate has no common name")
-	}
-
-	// Verify the certificate is valid
-	if err := verifyCertificate(cert); err != nil {
-		return nil, fmt.Errorf("certificate validation failed: %w", err)
 	}
 
 	principal := &Principal{
@@ -45,18 +35,6 @@ func AuthenticateMTLSRequest(r *http.Request) (*Principal, error) {
 	}
 
 	return principal, nil
-}
-
-// verifyCertificate performs basic validation on the client certificate
-func verifyCertificate(cert *x509.Certificate) error {
-	// The TLS handshake has already verified the certificate chain,
-	// so we just need to check basic properties
-
-	if cert.Subject.CommonName == "" {
-		return fmt.Errorf("certificate missing common name")
-	}
-
-	return nil
 }
 
 // RequireMTLS is a middleware that requires mTLS authentication
