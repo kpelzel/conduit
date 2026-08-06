@@ -51,7 +51,7 @@ server:
   metadata-path: /.well-known/oauth-protected-resource
   # the port that the mcp server will listen on
   port: 23457
-  # the public base url for the mcp server (e.g., https://mcp.example.com). If not set, the server will attempt to construct it from the request
+  # the public base url for the mcp server (e.g., https://mcp.example.com)
   public-url: ""
   http:
     allowed-origins:
