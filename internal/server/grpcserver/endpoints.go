@@ -1014,6 +1014,39 @@ func (s *ConduitServer) TransferNotify(notifyRequest *proto.NotifyRequest, strea
 	}
 
 	streamID := uuid.New()
+	uChan := make(chan *proto.NotifyMessage, 1)
+
+	defer func() {
+		var workerToStop *userNotificationWorker
+
+		s.usMutex.Lock()
+
+		if streams, ok := s.userStreams[user]; ok {
+			delete(streams, streamID)
+
+			if len(streams) == 0 {
+				delete(s.userStreams, user)
+
+				workerToStop = s.userStreamsWorkers[user]
+				delete(s.userStreamsWorkers, user)
+			}
+		}
+
+		s.usMutex.Unlock()
+
+		// Do not stop the worker while holding usMutex.
+		if workerToStop != nil {
+			workerToStop.stop()
+		}
+	}()
+
+	streamState := &userStream{
+		ch:   uChan,
+		done: stream.Context().Done(),
+	}
+
+	var worker *userNotificationWorker
+	startWorker := false
 
 	s.usMutex.Lock()
 
@@ -1022,14 +1055,20 @@ func (s *ConduitServer) TransferNotify(notifyRequest *proto.NotifyRequest, strea
 		s.userStreams[user] = make(map[uuid.UUID]*userStream)
 	}
 
-	uChan := make(chan *proto.NotifyMessage, 1)
-
-	s.userStreams[user][streamID] = &userStream{
-		ch:   uChan,
-		done: stream.Context().Done(),
+	worker = s.userStreamsWorkers[user]
+	if worker == nil {
+		worker = newUserNotificationWorker()
+		s.userStreamsWorkers[user] = worker
+		startWorker = true
 	}
 
+	s.userStreams[user][streamID] = streamState
+
 	s.usMutex.Unlock()
+
+	if startWorker {
+		go s.runUserNotificationWorker(user, worker)
+	}
 
 	for {
 		select {

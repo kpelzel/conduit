@@ -81,8 +81,9 @@ type ConduitServer struct {
 	activeStreams map[uuid.UUID]map[uuid.UUID]chan bool // key: transferID value: (key: streamID value: stream)
 	asMutex       sync.RWMutex                          // lock for activeStreams map
 
-	userStreams map[string]map[uuid.UUID]*userStream // key: username value: (key: streamID value: userStream)
-	usMutex     sync.RWMutex                         // lock for userStreams map
+	userStreams        map[string]map[uuid.UUID]*userStream // key: username value: (key: streamID value: userStream)
+	userStreamsWorkers map[string]*userNotificationWorker
+	usMutex            sync.RWMutex // lock for userStreams map
 
 	log *logger.ConduitLogger
 
@@ -292,29 +293,30 @@ func CreateConduitServer(debug bool) (*ConduitServer, error) {
 	healthpb.RegisterHealthServer(grpcServer, healthServer)
 
 	s := &ConduitServer{
-		log:            log,
-		si:             si,
-		em:             em,
-		cm:             cm,
-		rm:             rm,
-		tws:            tws,
-		lws:            lws,
-		id:             id,
-		sched:          sched,
-		transfers:      make(map[string]*proto.TransferDetails),
-		usersTransfers: make(map[string]map[uuid.UUID]bool),
-		tMutex:         sync.RWMutex{},
-		grpcServer:     grpcServer,
-		httpServer:     httpServer,
-		healthServer:   healthServer,
-		grpcAddr:       grpcAddr,
-		activeStreams:  make(map[uuid.UUID]map[uuid.UUID]chan bool),
-		asMutex:        sync.RWMutex{},
-		userStreams:    make(map[string]map[uuid.UUID]*userStream),
-		usMutex:        sync.RWMutex{},
-		serverState:    proto.ServerState_SERVER_STARTING,
-		usersErrants:   make(map[string]map[string]*timestamppb.Timestamp),
-		eMutex:         sync.RWMutex{},
+		log:                log,
+		si:                 si,
+		em:                 em,
+		cm:                 cm,
+		rm:                 rm,
+		tws:                tws,
+		lws:                lws,
+		id:                 id,
+		sched:              sched,
+		transfers:          make(map[string]*proto.TransferDetails),
+		usersTransfers:     make(map[string]map[uuid.UUID]bool),
+		tMutex:             sync.RWMutex{},
+		grpcServer:         grpcServer,
+		httpServer:         httpServer,
+		healthServer:       healthServer,
+		grpcAddr:           grpcAddr,
+		activeStreams:      make(map[uuid.UUID]map[uuid.UUID]chan bool),
+		asMutex:            sync.RWMutex{},
+		userStreams:        make(map[string]map[uuid.UUID]*userStream),
+		userStreamsWorkers: make(map[string]*userNotificationWorker),
+		usMutex:            sync.RWMutex{},
+		serverState:        proto.ServerState_SERVER_STARTING,
+		usersErrants:       make(map[string]map[string]*timestamppb.Timestamp),
+		eMutex:             sync.RWMutex{},
 	}
 
 	// add startup job to jobs wait group
@@ -683,11 +685,7 @@ func (s *ConduitServer) handleTransferEvents(evs []*clientv3.Event) {
 	}
 
 	for user, messages := range eventUsers {
-		go func(user string, messages []*proto.NotifyMessage) {
-			for _, message := range messages {
-				s.updateUserStreams(user, message)
-			}
-		}(user, messages)
+		s.enqueueUserNotifications(user, messages)
 	}
 }
 
