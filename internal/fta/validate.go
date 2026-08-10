@@ -4,6 +4,7 @@ package fta
 
 import (
 	"fmt"
+	"path/filepath"
 	"sync"
 
 	"github.com/google/uuid"
@@ -29,9 +30,31 @@ func StartPluginValidate(log *logger.ConduitLogger, t *proto.TransferDetails, no
 		}
 	}
 
-	srcPlugins, dstPlugin, pluginErrs := getSrcAndDstValidationPlugins(transferID, log, t.GetSource(), t.GetDestination())
+	pluginErrors := &proto.FTAPluginErrors{}
+
+	// glob the sources
+	globbedSources := []string{}
+	for _, s := range t.GetSource() {
+		gs, err := filepath.Glob(s)
+		if err != nil {
+			pluginErrors.Warnings = append(pluginErrors.Warnings, &proto.FTAPathError{
+				LeasePath:  s,
+				PErr:       proto.Error_ERROR_CONDUIT_INTERNAL,
+				ErrMessage: fmt.Sprintf("failed to glob source[%v]: %v", s, err),
+			})
+
+			globbedSources = append(globbedSources, s)
+
+			continue
+		}
+
+		globbedSources = append(globbedSources, gs...)
+	}
+
+	srcPlugins, dstPlugin, pluginErrs := getSrcAndDstValidationPlugins(transferID, log, globbedSources, t.GetDestination())
 	if len(pluginErrs.Errors) > 0 {
-		return pluginData, proto.DestInfo_DEST_NONE, pluginErrs
+		pluginErrors.Errors = pluginErrs.Errors
+		return pluginData, proto.DestInfo_DEST_NONE, pluginErrors
 	}
 
 	log.Debugf("sourceplugins: %+v", srcPlugins)
@@ -40,13 +63,12 @@ func StartPluginValidate(log *logger.ConduitLogger, t *proto.TransferDetails, no
 	pluginData.DestinationPluginInfo = dstPlugin
 
 	// add sources to pluginData
-	for _, s := range t.GetSource() {
+	for _, s := range globbedSources {
 		pluginData.SourcePluginInfo[s] = srcPlugins[s]
 	}
 
 	var wg sync.WaitGroup
 
-	pluginErrors := &proto.FTAPluginErrors{}
 	var resolvedFTADestinations, userDestinations []string
 	var ppd map[string]*string
 	var pdLock sync.Mutex
@@ -104,7 +126,7 @@ func StartPluginValidate(log *logger.ConduitLogger, t *proto.TransferDetails, no
 	}
 
 	var destPluginErrors *proto.FTAPluginErrors
-	log.Debugf("sources: %v", t.GetSource())
+	log.Debugf("sources: %v", globbedSources)
 	log.Debugf("destination: %v", t.GetDestination())
 	log.Debugf("dstPlugin.ResolvedFTAPath: %v", dstPlugin.ResolvedFTAPath)
 	log.Debugf("dstPlugin.FSC: %v", dstPlugin.FSC)
