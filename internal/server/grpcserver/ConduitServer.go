@@ -417,7 +417,7 @@ func (s *ConduitServer) StartConduitServer(clearEtcd bool) error {
 		s.log.Debug("etcd current revision is the same as the compact revision")
 	}
 
-	// have etcd mangager start watching the transfer and lease prefixes
+	// have etcd manager start watching the transfer and lease prefixes
 	wctx, wCancel := context.WithCancelCause(context.Background())
 	go s.em.StartWatchChannels(status.Header.GetRevision(), wCancel)
 	defer s.em.CloseClient()

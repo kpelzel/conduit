@@ -4,6 +4,7 @@ package fta
 
 import (
 	"fmt"
+	"path/filepath"
 	"sync"
 
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ import (
 	"github.com/lanl/conduit/internal/logger"
 )
 
-func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer, em *etcd.ETCDManager, nodeList string) (pluginData *plugin.PluginData, destInfo proto.DestInfo, _ plugin.PluginErrors) {
+func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer, em *etcd.ETCDManager, nodeList string) (pluginData *plugin.PluginData, destInfo proto.DestInfo, pluginErrors plugin.PluginErrors) {
 	pluginData = &plugin.PluginData{
 		SourcePluginInfo:       make(map[string]*plugin.PluginPathInfo),
 		DestinationsPluginInfo: make(map[string]*plugin.PluginPathInfo),
@@ -52,7 +53,26 @@ func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer,
 		}
 	}
 
-	srcPlugins, dstPlugin, pluginErrs := getSrcAndDstValidationPlugins(transferID, log, sources, destination)
+	// glob the sources
+	globbedSources := []string{}
+	for _, s := range sources {
+		gs, err := filepath.Glob(s)
+		if err != nil {
+			pluginErrors.Warnings = append(pluginErrors.Warnings, &plugin.FTAPathError{
+				LeasePath:  s,
+				PErr:       proto.Error_ERROR_CONDUIT_INTERNAL,
+				ErrMessage: fmt.Errorf("failed to glob source[%v]: %v", s, err),
+			})
+
+			globbedSources = append(globbedSources, s)
+
+			continue
+		}
+
+		globbedSources = append(globbedSources, gs...)
+	}
+
+	srcPlugins, dstPlugin, pluginErrs := getSrcAndDstValidationPlugins(transferID, log, globbedSources, destination)
 	if len(pluginErrs.Errors) > 0 {
 		return pluginData, proto.DestInfo_DEST_NONE, pluginErrs
 	}
@@ -63,13 +83,12 @@ func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer,
 	pluginData.DestinationPluginInfo = dstPlugin
 
 	// add sources to pluginData
-	for _, s := range sources {
+	for _, s := range globbedSources {
 		pluginData.SourcePluginInfo[s] = srcPlugins[s]
 	}
 
 	var wg sync.WaitGroup
 
-	var pluginErrors plugin.PluginErrors
 	var resolvedFTADestinations, userDestinations []string
 	var ppd map[string]*string
 	var pdLock sync.Mutex
@@ -127,7 +146,7 @@ func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer,
 	}
 
 	var destPluginErrors plugin.PluginErrors
-	log.Debugf("sources: %v", sources)
+	log.Debugf("sources: %v", globbedSources)
 	log.Debugf("destination: %v", destination)
 	log.Debugf("dstPlugin.ResolvedFTAPath: %v", dstPlugin.ResolvedFTAPath)
 	log.Debugf("dstPlugin.FSC: %v", dstPlugin.FSC)
