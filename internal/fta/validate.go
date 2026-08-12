@@ -9,9 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	proto "github.com/lanl/conduit/api"
+	"github.com/lanl/conduit/defaults"
 	"github.com/lanl/conduit/internal/etcd"
 	"github.com/lanl/conduit/internal/fta/plugin"
 	"github.com/lanl/conduit/internal/logger"
+	"github.com/spf13/viper"
 )
 
 func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer, em *etcd.ETCDManager, nodeList string) (pluginData *plugin.PluginData, destInfo proto.DestInfo, pluginErrors plugin.PluginErrors) {
@@ -70,6 +72,22 @@ func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer,
 		}
 
 		globbedSources = append(globbedSources, gs...)
+	}
+
+	// limit character count. This is to prevent a user from passing a wildcard that blows up etcd and slows down queries (it would fail the arg limit at the transfer stage)
+	maxSourceBytes := viper.GetInt(defaults.ConfigMaxSourceBytesKey)
+	byteCount := 0
+	for _, s := range globbedSources {
+		byteCount = byteCount + len([]byte(s))
+	}
+
+	if byteCount > maxSourceBytes {
+		pluginErrors.Errors = []*plugin.FTAPathError{{
+			PErr:       proto.Error_ERROR_INVALID_INPUT,
+			ErrMessage: fmt.Errorf("request contains too many sources. byte limit: %v, received: %v. Please use a directory instead of a wildcard when transferring a large number of sources", maxSourceBytes, byteCount),
+		}}
+
+		return pluginData, proto.DestInfo_DEST_NONE, pluginErrors
 	}
 
 	srcPlugins, dstPlugin, pluginErrs := getSrcAndDstValidationPlugins(transferID, log, globbedSources, destination)

@@ -117,6 +117,8 @@ const (
 	DefaultCertPostalCode   = "87545"
 
 	DefaultOAuthUserFallback = true
+
+	DefaultMaxSourceBytes = 4000
 )
 
 // CLI default values

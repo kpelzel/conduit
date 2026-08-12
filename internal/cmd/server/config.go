@@ -41,8 +41,7 @@ const (
 	DefaultLDAPHost = ""
 	DefaultLDAPPort = 389
 
-	DefaultMaxSourceBytes = 4000
-	DefaultExpiryAdvance  = "60s"
+	DefaultExpiryAdvance = "60s"
 
 	DefaultErrantExpiration      = "336h" // two weeks
 	DefaultRequestedCertLifetime = "24h"
@@ -230,7 +229,7 @@ func createDefaultConfig() {
 	viper.SetDefault(defaults.ConfigTestKey, false)
 
 	viper.SetDefault(defaults.ConfigExpiryAdvanceKey, DefaultExpiryAdvance)
-	viper.SetDefault(defaults.ConfigMaxSourceBytesKey, DefaultMaxSourceBytes)
+	viper.SetDefault(defaults.ConfigMaxSourceBytesKey, defaults.DefaultMaxSourceBytes)
 
 	viper.SetDefault(defaults.ConfigErrantExpiration, DefaultErrantExpiration)
 	viper.SetDefault(defaults.ConfigRequestedCertLifetime, DefaultRequestedCertLifetime)

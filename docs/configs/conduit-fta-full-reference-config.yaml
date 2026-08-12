@@ -6,6 +6,8 @@ transfer:
   expiry-advance: 5m
   # duration of interval between each lease extension
   expiry-interval: 30s
+  # the number in bytes (or characters) that the conduit server will accept for a source. This is useful for preventing users from providing an extremely large number of sources (ex: wildcard usage in slurm plugin)
+  max-source-bytes: 4000
 # hostname, ip address, and port for the etcd nodes that this conduit instance will attempt to connect to. This will be etcd's `listen-client-urls` value. Hostname is used for mTLS certs
 etcd:
   - hostname: ""
