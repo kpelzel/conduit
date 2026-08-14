@@ -46,11 +46,12 @@ func StartPluginValidate(log *logger.ConduitLogger, t *proto.TransferDetails, no
 			})
 
 			globbedSources = append(globbedSources, s)
-
-			continue
+		} else if len(gs) == 0 {
+			// if the glob doesn't error and doesn't return anything, preserve the source and let normal source validation reject it.
+			globbedSources = append(globbedSources, s)
+		} else {
+			globbedSources = append(globbedSources, gs...)
 		}
-
-		globbedSources = append(globbedSources, gs...)
 	}
 
 	// limit character count. This is to prevent a user from passing a wildcard that blows up etcd and slows down queries (it would fail the arg limit at the transfer stage)
