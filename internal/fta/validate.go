@@ -67,11 +67,12 @@ func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer,
 			})
 
 			globbedSources = append(globbedSources, s)
-
-			continue
+		} else if len(gs) == 0 {
+			// if the glob doesn't error and doesn't return anything, preserve the source and let normal source validation reject it.
+			globbedSources = append(globbedSources, s)
+		} else {
+			globbedSources = append(globbedSources, gs...)
 		}
-
-		globbedSources = append(globbedSources, gs...)
 	}
 
 	// limit character count. This is to prevent a user from passing a wildcard that blows up etcd and slows down queries (it would fail the arg limit at the transfer stage)
@@ -84,7 +85,7 @@ func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer,
 	if byteCount > maxSourceBytes {
 		pluginErrors.Errors = []*plugin.FTAPathError{{
 			PErr:       proto.Error_ERROR_INVALID_INPUT,
-			ErrMessage: fmt.Errorf("request contains too many sources. byte limit: %v, received: %v. Please use a directory instead of a wildcard when transferring a large number of sources", maxSourceBytes, byteCount),
+			ErrMessage: fmt.Errorf("request contains too many sources. character limit: %v, received: %v. Please use a directory instead of a wildcard when transferring a large number of sources", maxSourceBytes, byteCount),
 		}}
 
 		return pluginData, proto.DestInfo_DEST_NONE, pluginErrors
