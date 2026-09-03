@@ -60,6 +60,9 @@ plugins:
   rsync:
     # path to rsync binary
     rsync-path: rsync
+  scoutam:
+    # path to stager binary/utility
+    stager-path: samnfs
   marchive:
     # The MarFS object list generation command
     objlist-path: mustang
