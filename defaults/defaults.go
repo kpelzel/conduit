@@ -118,7 +118,7 @@ const (
 
 	DefaultOAuthUserFallback = true
 
-	DefaultMaxSourceBytes = 4000
+	DefaultMaxSourceBytes = 131072
 )
 
 // CLI default values

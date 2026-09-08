@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -92,10 +93,12 @@ func NewETCDManager(log *logger.ConduitLogger, tlsCert *tls.Certificate, certPoo
 	// issue described here: https://github.com/etcd-io/etcd/issues/13300
 	em.log.Debug("creating etcd client")
 	eConfig := clientv3.Config{
-		Endpoints:   etcdEndpoints,
-		DialTimeout: defaults.DefaultETCDTimeout,
-		TLS:         tlsConfig,
-		DialOptions: []grpc.DialOption{},
+		Endpoints:          etcdEndpoints,
+		DialTimeout:        defaults.DefaultETCDTimeout,
+		TLS:                tlsConfig,
+		DialOptions:        []grpc.DialOption{},
+		MaxCallSendMsgSize: 10 * 1024 * 1024, // 10 MiB Send Limit
+		MaxCallRecvMsgSize: math.MaxInt32,    // Effectively unlimited Recv,
 		// Logger: zLogger,
 	}
 	c, err := clientv3.New(eConfig)

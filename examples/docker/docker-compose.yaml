@@ -245,6 +245,7 @@ services:
       - --peer-trusted-ca-file=/conduit/conduit-internal-ca.pem
       - --peer-client-cert-auth
       - --quota-backend-bytes=8589934592
+      - --max-request-bytes=10485760
     networks:
       conduit:
         ipv4_address: 192.168.20.21
@@ -281,6 +282,7 @@ services:
       - --peer-trusted-ca-file=/conduit/conduit-internal-ca.pem
       - --peer-client-cert-auth
       - --quota-backend-bytes=8589934592
+      - --max-request-bytes=10485760
     networks:
       conduit:
         ipv4_address: 192.168.20.22
@@ -317,6 +319,7 @@ services:
       - --peer-trusted-ca-file=/conduit/conduit-internal-ca.pem
       - --peer-client-cert-auth
       - --quota-backend-bytes=8589934592
+      - --max-request-bytes=10485760
     networks:
       conduit:
         ipv4_address: 192.168.20.23
