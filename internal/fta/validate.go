@@ -41,7 +41,7 @@ func StartPluginValidate(log *logger.ConduitLogger, t *proto.TransferDetails, no
 		if err != nil {
 			pluginErrors.Warnings = append(pluginErrors.Warnings, &proto.FTAPathError{
 				LeasePath:  s,
-				PErr:       proto.Error_ERROR_CONDUIT_INTERNAL,
+				PErr:       proto.Error_ERROR_INVALID_INPUT,
 				ErrMessage: fmt.Sprintf("failed to glob source[%v]: %v", s, err),
 			})
 
