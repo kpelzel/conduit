@@ -4,7 +4,6 @@ package fta
 
 import (
 	"fmt"
-	"path/filepath"
 	"sync"
 
 	"github.com/google/uuid"
@@ -35,23 +34,24 @@ func StartPluginValidate(log *logger.ConduitLogger, t *proto.TransferDetails, no
 	pluginErrors := &proto.FTAPluginErrors{}
 
 	// glob the sources
+	fscs, err := plugin.GetFSCsFromViper()
+	if err != nil {
+		return pluginData, proto.DestInfo_DEST_NONE, &proto.FTAPluginErrors{
+			Errors: []*proto.FTAPathError{{
+				PErr:       proto.Error_ERROR_CONDUIT_INTERNAL,
+				ErrMessage: fmt.Sprintf("failed to get filesystem configurations from viper: %v", err),
+			}},
+		}
+	}
+
 	globbedSources := []string{}
 	for _, s := range t.GetSource() {
-		gs, err := filepath.Glob(s)
-		if err != nil {
-			pluginErrors.Warnings = append(pluginErrors.Warnings, &proto.FTAPathError{
-				LeasePath:  s,
-				PErr:       proto.Error_ERROR_INVALID_INPUT,
-				ErrMessage: fmt.Sprintf("failed to glob source[%v]: %v", s, err),
-			})
-
-			globbedSources = append(globbedSources, s)
-		} else if len(gs) == 0 {
-			// if the glob doesn't error and doesn't return anything, preserve the source and let normal source validation reject it.
-			globbedSources = append(globbedSources, s)
-		} else {
-			globbedSources = append(globbedSources, gs...)
+		gs, pathErr := globSource(transferID, log, s, fscs)
+		if pathErr != nil {
+			pluginErrors.Warnings = append(pluginErrors.Warnings, pathErr)
 		}
+
+		globbedSources = append(globbedSources, gs...)
 	}
 
 	// limit character count. This is to prevent a user from passing a wildcard that blows up etcd and slows down queries (it would fail the arg limit at the transfer stage)
