@@ -126,7 +126,7 @@ const (
 	DefaultVerifySleepDuration = 5 * time.Second
 	DefaultVerifyRetryCount    = 20
 
-	DefaultMaxSourceBytes = 4000
+	DefaultMaxSourceBytes = 131072
 )
 
 // CLI default values
