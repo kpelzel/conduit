@@ -114,15 +114,7 @@ func createDefaultConfig() {
 	viper.SetDefault(defaults.ConfigExpiryIntervalKey, DefaultExpiryUpdateInterval)
 	viper.SetDefault(defaults.ConfigExpiryAdvanceKey, DefaultExpiryAdvance)
 
-	pluginConfs := map[string]any{}
-	for pluginKey, plugin := range fta.PluginMap {
-		pluginConfig := plugin.GetDefaultConfig()
-		if pluginConfig != nil {
-			pluginConfs[pluginKey] = pluginConfig
-		}
-	}
-
-	viper.SetDefault(defaults.ConfigPluginsKey, pluginConfs)
+	setPluginDefaults()
 
 	viper.SetDefault(defaults.ConfigFTAVerifyRetryCountKey, DefaultVerifyRetryCount)
 	viper.SetDefault(defaults.ConfigFTAVerifySleepDurationKey, DefaultVerifySleepDuration)
@@ -153,5 +145,14 @@ func createDefaultConfig() {
 		logrus.Warnf("failed to write default config: %v", err)
 	} else {
 		logrus.Infof("wrote default config to: %v", finalConfigPath)
+	}
+}
+
+func setPluginDefaults() {
+	for pluginKey, p := range fta.PluginMap {
+		pluginConfig := p.GetDefaultConfig()
+		if pluginConfig != nil {
+			viper.SetDefault(fmt.Sprintf("%s.%s", defaults.ConfigPluginsKey, pluginKey), pluginConfig)
+		}
 	}
 }
