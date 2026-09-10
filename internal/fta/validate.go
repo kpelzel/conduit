@@ -79,21 +79,25 @@ func StartPluginValidate(log *logger.ConduitLogger, it proto.IncompleteTransfer,
 	maxSourceBytes := viper.GetInt(defaults.ConfigMaxSourceBytesKey)
 	byteCount := 0
 	for _, s := range globbedSources {
-		byteCount = byteCount + len([]byte(s))
+		byteCount += len(s)
 	}
 
 	if byteCount > maxSourceBytes {
 		pluginErrors.Errors = []*plugin.FTAPathError{{
 			PErr:       proto.Error_ERROR_INVALID_INPUT,
-			ErrMessage: fmt.Errorf("request contains too many sources. character limit: %v, received: %v. Please use a directory instead of a wildcard when transferring a large number of sources", maxSourceBytes, byteCount),
+			ErrMessage: fmt.Errorf("request contains too many sources. byte limit: %v, received: %v. Please use a directory instead of a wildcard when transferring a large number of sources", maxSourceBytes, byteCount),
 		}}
 
 		return pluginData, proto.DestInfo_DEST_NONE, pluginErrors
 	}
 
 	srcPlugins, dstPlugin, pluginErrs := getSrcAndDstValidationPlugins(transferID, log, globbedSources, destination)
-	if len(pluginErrs.Errors) > 0 {
-		return pluginData, proto.DestInfo_DEST_NONE, pluginErrs
+
+	pluginErrors.Errors = append(pluginErrors.Errors, pluginErrs.Errors...)
+	pluginErrors.Warnings = append(pluginErrors.Warnings, pluginErrs.Warnings...)
+
+	if len(pluginErrors.Errors) > 0 {
+		return pluginData, proto.DestInfo_DEST_NONE, pluginErrors
 	}
 
 	log.Debugf("sourceplugins: %+v", srcPlugins)
