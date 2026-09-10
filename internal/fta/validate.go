@@ -58,7 +58,7 @@ func StartPluginValidate(log *logger.ConduitLogger, t *proto.TransferDetails, no
 	maxSourceBytes := viper.GetInt(defaults.ConfigMaxSourceBytesKey)
 	byteCount := 0
 	for _, s := range globbedSources {
-		byteCount = byteCount + len([]byte(s))
+		byteCount += len(s)
 	}
 
 	if byteCount > maxSourceBytes {
@@ -71,8 +71,11 @@ func StartPluginValidate(log *logger.ConduitLogger, t *proto.TransferDetails, no
 	}
 
 	srcPlugins, dstPlugin, pluginErrs := getSrcAndDstValidationPlugins(transferID, log, globbedSources, t.GetDestination())
-	if len(pluginErrs.Errors) > 0 {
-		pluginErrors.Errors = pluginErrs.Errors
+
+	pluginErrors.Errors = append(pluginErrors.Errors, pluginErrs.Errors...)
+	pluginErrors.Warnings = append(pluginErrors.Warnings, pluginErrs.Warnings...)
+
+	if len(pluginErrors.Errors) > 0 {
 		return pluginData, proto.DestInfo_DEST_NONE, pluginErrors
 	}
 
