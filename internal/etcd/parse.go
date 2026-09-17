@@ -70,7 +70,7 @@ func ParseETCDTransfer(id uuid.UUID, kvs []*mvccpb.KeyValue, old *proto.Transfer
 		switch {
 		case string(kv.Key) == t.ETCDStatusDetailsKey():
 			esd := &proto.ETCDStatusDetails{}
-			err := json.Unmarshal(kv.Value, esd)
+			err := protojson.Unmarshal(kv.Value, esd)
 			if err != nil {
 				return nil, fmt.Errorf("transfer[%s]: failed to unmarshal status details from etcd into json object: %v [%v]", id, err, string(kv.Value))
 			}
@@ -148,6 +148,8 @@ func ParseETCDTransfer(id uuid.UUID, kvs []*mvccpb.KeyValue, old *proto.Transfer
 			t.User = string(kv.Value)
 		case string(kv.Key) == t.ETCDCommentKey():
 			t.Comment = string(kv.Value)
+		case string(kv.Key) == t.ETCDStatusKey():
+			t.Status = string(kv.Value)
 		case string(kv.Key) == t.ETCDStartTimeKey():
 			startTime, err := time.Parse(time.RFC3339, string(kv.Value))
 			if err != nil {
@@ -173,7 +175,7 @@ func ParseETCDTransfer(id uuid.UUID, kvs []*mvccpb.KeyValue, old *proto.Transfer
 			if err != nil {
 				return nil, fmt.Errorf("transfer[%s]: failed to parse priority: %v", id, err)
 			}
-			t.Priority = uint32(priority)
+			t.Priority = int64(priority)
 		case string(kv.Key) == t.ETCDExpiryKey():
 			expiryTime, err := time.Parse(time.RFC3339, string(kv.Value))
 			if err != nil {
@@ -230,7 +232,6 @@ func ConvertETCDTransfer(t *proto.TransferDetails) ([]clientv3.Op, error) {
 	// }
 
 	// create ops for transfer state, error, user, starttime, endtime, and error message
-	ops = append(ops, clientv3.OpPut(t.ETCDStateKey(), t.GetState().String()))
 	ops = append(ops, clientv3.OpPut(t.ETCDErrorKey(), t.GetError().String()))
 	ops = append(ops, clientv3.OpPut(t.ETCDSourceKey(), string(sourceList)))
 	ops = append(ops, clientv3.OpPut(t.ETCDWarningsKey(), string(warningsList)))
@@ -245,6 +246,7 @@ func ConvertETCDTransfer(t *proto.TransferDetails) ([]clientv3.Op, error) {
 	ops = append(ops, clientv3.OpPut(t.ETCDActionKey(), t.GetAction()))
 	ops = append(ops, clientv3.OpPut(t.ETCDOptionsKey(), string(options)))
 	ops = append(ops, clientv3.OpPut(t.ETCDCommentKey(), t.GetComment()))
+	ops = append(ops, clientv3.OpPut(t.ETCDStatusKey(), t.GetStatus()))
 	ops = append(ops, clientv3.OpPut(t.ETCDPausedStateKey(), t.GetPausedState().String()))
 	ops = append(ops, clientv3.OpPut(t.ETCDExpiryKey(), t.GetExpiry().AsTime().Format(time.RFC3339)))
 	ops = append(ops, clientv3.OpPut(t.ETCDArchiveStateKey(), t.GetArchiveState().String()))
@@ -270,11 +272,14 @@ func ConvertETCDTransfer(t *proto.TransferDetails) ([]clientv3.Op, error) {
 	}
 
 	// create op for transfer status details
-	esd, err := t.ETCDStatusDetails()
+	esd, err := t.EncodeETCDStatusDetails()
 	if err != nil {
 		return nil, fmt.Errorf("transfer[%s]: failed to marshal transfer status details for etcd: %v", t.GetTransferID(), err)
 	}
 	ops = append(ops, clientv3.OpPut(t.ETCDStatusDetailsKey(), string(esd)))
+
+	// make the state op happen at the end
+	ops = append(ops, clientv3.OpPut(t.ETCDStateKey(), t.GetState().String()))
 
 	return ops, nil
 }

@@ -3,7 +3,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/encoding/protojson"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -35,6 +35,7 @@ const (
 	CreatedTimeKey   = "createdTime"
 	ErrorMessageKey  = "errorMessage"
 	StatusDetailsKey = "statusDetails"
+	StatusKey        = "status"
 	ActiveKey        = "active"
 	ActionKey        = "action"
 	OptionsKey       = "options"
@@ -56,15 +57,6 @@ var PurgeValue = timestamppb.New(time.Time{})
 
 var etcdTransferKeyRegex = regexp.MustCompile(`transfers\/(\S+?)\/(?:(?:schedulerNodes)\/([^\s\/]+))?`)
 var etcdErrorKeyRegex = regexp.MustCompile(`errors\/(\S+?)\/(\S+)`)
-
-type ETCDStatusDetails struct {
-	Data         string `json:"data"`
-	Files        uint32 `json:"files"`
-	Bandwidth    string `json:"bandwidth"`
-	FilesChunks  uint32 `json:"filesChunks"`
-	Directories  uint32 `json:"directories"`
-	PluginStatus string `json:"pluginStatus"`
-}
 
 func (t *TransferDetails) getKey(key string) string {
 	if t.GetTransferID() == "" {
@@ -190,6 +182,11 @@ func (t *TransferDetails) ETCDValidationOnlyKey() string {
 	return t.getKey(ValidationOnlyKey)
 }
 
+// ETCDStatusKey requires TransferDetails to have a minimum of TransferID specified
+func (t *TransferDetails) ETCDStatusKey() string {
+	return t.getKey(StatusKey)
+}
+
 // // ETCDFullDestinationsKey requires TransferDetails to have a minimum of TransferID specified
 // func (t *TransferDetails) ETCDFullDestinationsKey() string {
 // 	return t.getKey(FullDestinationsKey)
@@ -215,8 +212,8 @@ func (t *TransferDetails) ETCDJobsKey() string {
 	return JobsPrefix + t.GetTransferID()
 }
 
-// ETCDStatusDetails returns a json marshalled version of a transfer's status details to be put in ETCD
-func (t *TransferDetails) ETCDStatusDetails() ([]byte, error) {
+// ETCDStatusDetails returns the transfer's status details
+func (t *TransferDetails) ETCDStatusDetails() *ETCDStatusDetails {
 	etd := &ETCDStatusDetails{
 		Data:         t.DataTransferred,
 		Files:        t.FilesTransferred,
@@ -226,7 +223,12 @@ func (t *TransferDetails) ETCDStatusDetails() ([]byte, error) {
 		PluginStatus: t.PluginStatus,
 	}
 
-	return json.Marshal(etd)
+	return etd
+}
+
+// EncodeETCDStatusDetails returns a json marshalled version of a transfer's status details to be put in ETCD
+func (t *TransferDetails) EncodeETCDStatusDetails() ([]byte, error) {
+	return protojson.Marshal(t.ETCDStatusDetails())
 }
 
 // ParseETCDTransfersKey returns the transfer id, unescaped path of a lease, and a schdulerCommand from an etcd key
@@ -240,6 +242,10 @@ func ParseETCDTransfersKey(etcdKey string) (id uuid.UUID, schdulerCommand Schedu
 	// match 2: schedulerNodes map command (TEARDOWN)
 	matches := etcdTransferKeyRegex.FindStringSubmatch(etcdKey)
 
+	if matches == nil {
+		return uuid.Nil, SchedulerCommand_NONE, fmt.Errorf("no matches for[%v]: %v", etcdKey, err)
+	}
+
 	// check if transferID exists
 	if matches[1] != "" {
 		// get transfer id
@@ -248,7 +254,7 @@ func ParseETCDTransfersKey(etcdKey string) (id uuid.UUID, schdulerCommand Schedu
 			return uuid.Nil, SchedulerCommand_NONE, fmt.Errorf("failed to parse transfer id from key[%v]: %v", etcdKey, err)
 		}
 	} else {
-		return uuid.Nil, SchedulerCommand_NONE, fmt.Errorf("no transferID found in key[%v]: %v", etcdKey, err)
+		return uuid.Nil, SchedulerCommand_NONE, fmt.Errorf("no transferID found in key[%v]", etcdKey)
 	}
 
 	// check if schedulerNodes command exists
@@ -260,7 +266,7 @@ func ParseETCDTransfersKey(etcdKey string) (id uuid.UUID, schdulerCommand Schedu
 		schdulerCommand = SchedulerCommand(sc)
 	}
 
-	return id, schdulerCommand, err
+	return id, schdulerCommand, nil
 }
 
 // ParseETCDErrorsKey returns the user and unescaped trash path from an etcd key
@@ -326,7 +332,7 @@ func NewTransferDetails() *TransferDetails {
 		DestInfo:               DestInfo_DEST_NONE,
 		ValidationOnly:         false,
 		PluginData:             []byte{},
-		PluginStatus:           "",
+		Status:                 "",
 		Priority:               0,
 		Options:                make(map[string]*anypb.Any),
 	}
@@ -359,6 +365,7 @@ type IncompleteTransfer interface {
 	ETCDEndTimeKey() string
 	ETCDCreatedTimeKey() string
 	ETCDStatusDetailsKey() string
+	ETCDStatusKey() string
 	ETCDCommentKey() string
 	ETCDPausedStateKey() string
 	ETCDArchiveStateKey() string

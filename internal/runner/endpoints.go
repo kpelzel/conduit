@@ -1,6 +1,6 @@
 // Copyright 2026. Triad National Security, LLC. All rights reserved.
 
-package internal
+package runner
 
 import (
 	"context"
@@ -15,7 +15,6 @@ import (
 
 // GetNodeStatusStream responds with the list of all jobs running on nodes
 func (r *Runner) GetNodeStatusStream(_ *emptypb.Empty, stream proto.ConduitRunnerApi_GetNodeStatusStreamServer) error {
-
 	streaminfo := &StreamInfo{
 		quitChan: make(chan bool),
 		stream:   &stream,
@@ -72,6 +71,7 @@ func (r *Runner) GetNodeStatus(context.Context, *emptypb.Empty) (*proto.NodeStat
 	status := &proto.NodeStatus{
 		Jobs:            currentJobs,
 		AvailableMemory: r.AvailableMemory,
+		JobsVersion:     r.JobsVersion,
 	}
 
 	return status, nil
@@ -90,6 +90,8 @@ func (r *Runner) SubmitFTAJob(ctx context.Context, req *proto.JobRequest) (*prot
 		return nil, tErr
 	}
 
+	r.log.Debugf("request for %s transfer[%s]", req.GetCmd(), req.GetTransferID())
+
 	r.JobsInfoLock.Lock()
 	defer r.JobsInfoLock.Unlock()
 
@@ -100,11 +102,12 @@ func (r *Runner) SubmitFTAJob(ctx context.Context, req *proto.JobRequest) (*prot
 		providedJobs := req.GetExistingJobs()
 		for tid, ji := range r.JobsInfo {
 			if pji, ok := providedJobs[tid]; ok {
-				for cmd, _ := range ji.GetActions() {
+				for cmd := range ji.GetActions() {
 					if _, ok := pji.GetActions()[cmd]; !ok {
 						return &proto.NodeStatus{
 							Jobs:            r.getCurrentJobs(),
 							AvailableMemory: r.AvailableMemory,
+							JobsVersion:     r.JobsVersion,
 						}, nil
 					}
 				}
@@ -112,6 +115,7 @@ func (r *Runner) SubmitFTAJob(ctx context.Context, req *proto.JobRequest) (*prot
 				return &proto.NodeStatus{
 					Jobs:            r.getCurrentJobs(),
 					AvailableMemory: r.AvailableMemory,
+					JobsVersion:     r.JobsVersion,
 				}, nil
 			}
 		}
@@ -125,6 +129,7 @@ func (r *Runner) SubmitFTAJob(ctx context.Context, req *proto.JobRequest) (*prot
 	}
 
 	r.JobsInfo[id.String()].GetActions()[int32(req.GetCmd())] = true
+	r.JobsVersion++
 
 	if req.Type == proto.JobType_ALLOCATE {
 		r.log.Infof("allocate %s job for transfer %s", req.GetTransferID(), req.GetCmd())
@@ -142,6 +147,7 @@ func (r *Runner) SubmitFTAJob(ctx context.Context, req *proto.JobRequest) (*prot
 	return &proto.NodeStatus{
 		Jobs:            r.getCurrentJobs(),
 		AvailableMemory: r.AvailableMemory,
+		JobsVersion:     r.JobsVersion,
 	}, nil
 }
 

@@ -4,13 +4,10 @@ package ftacmd
 
 import (
 	"fmt"
-	"net"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/lanl/conduit/defaults"
-	"github.com/lanl/conduit/internal/etcd/util"
 	"github.com/lanl/conduit/internal/fta"
 	"github.com/lanl/conduit/internal/fta/plugin"
 	"github.com/lanl/conduit/internal/fta/plugins/posix"
@@ -25,21 +22,11 @@ const (
 	envPrefix                   = "CONDUIT_FTA"
 	DefaultCACertName           = "conduit-ca.pem"
 	DefaultExpiryUpdateInterval = "30s"
-	DefaultExpiryAdvance        = "5m"
-	DefaultVerifySleepDuration  = 5 * time.Second
-	DefaultVerifyRetryCount     = 20
 )
 
 var (
-	DefaultETCDPort   = []int{2379}
-	DefaultETCDIPNet  = []net.IP{net.IPv4(127, 0, 0, 1)}
-	DefaultEtcdConfig = util.EViperConfig{
-		IP:   DefaultETCDIPNet[0].String(),
-		Port: DefaultETCDPort[0],
-	}
-	DefaultCACertLocation = fmt.Sprintf("%v/%v", filepath.Clean(DefaultConfigLocation), DefaultCACertName)
-	DefaultFileSystems    = map[string]plugin.ViperFSConfig{plugin.DefaultFileSystemName: DefaultFileSystem}
-	DefaultFileSystem     = plugin.ViperFSConfig{
+	DefaultFileSystems = map[string]plugin.ViperFSConfig{plugin.DefaultFileSystemName: DefaultFileSystem}
+	DefaultFileSystem  = plugin.ViperFSConfig{
 		UserPathRegex:    `.*`,
 		FTAPathSub:       `$0`,
 		FTARootFSPathSub: `/`,
@@ -109,36 +96,14 @@ func initConfig(cfgFile string) {
 }
 
 func createDefaultConfig() {
-	viper.SetDefault(defaults.ConfigInternalCACertKey, DefaultCACertLocation)
-
 	viper.SetDefault(defaults.ConfigExpiryIntervalKey, DefaultExpiryUpdateInterval)
-	viper.SetDefault(defaults.ConfigExpiryAdvanceKey, DefaultExpiryAdvance)
 
 	setPluginDefaults()
 
-	viper.SetDefault(defaults.ConfigFTAVerifyRetryCountKey, DefaultVerifyRetryCount)
-	viper.SetDefault(defaults.ConfigFTAVerifySleepDurationKey, DefaultVerifySleepDuration)
+	viper.SetDefault(defaults.ConfigFTAVerifyRetryCountKey, defaults.DefaultVerifyRetryCount)
+	viper.SetDefault(defaults.ConfigFTAVerifySleepDurationKey, defaults.DefaultVerifySleepDuration)
 
 	viper.SetDefault(defaults.ConfigFilesystemsKey, DefaultFileSystems)
-
-	if (RootCmd.PersistentFlags().Changed("etcd-ip") ||
-		RootCmd.PersistentFlags().Changed("etcd-port")) &&
-		len(etcdIPs) == len(etcdPorts) {
-		etcdConfs := []*util.EViperConfig{}
-		for i := 0; i < len(etcdIPs); i++ {
-			ec := &util.EViperConfig{
-				IP:   etcdIPs[i].String(),
-				Port: etcdPorts[i],
-			}
-			etcdConfs = append(etcdConfs, ec)
-		}
-		viper.Set(defaults.ConfigETCDKey, etcdConfs)
-	}
-
-	viper.SetDefault(defaults.ConfigETCDKey, []util.EViperConfig{DefaultEtcdConfig})
-
-	// logrus.Info(viper.AllSettings())
-	// logrus.Info(viper.AllKeys())
 
 	err := viper.SafeWriteConfig()
 	if err != nil {

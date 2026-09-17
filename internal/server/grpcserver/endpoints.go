@@ -137,7 +137,7 @@ func (s *ConduitServer) StartTransfer(ctx context.Context, tr *proto.TransferReq
 
 	transfer := proto.NewTransferDetails()
 
-	transfer.State = proto.TransferState_TRANSFER_INIT
+	transfer.State = proto.TransferState_TRANSFER_INIT_COMPLETE
 	transfer.TransferID = transferID.String()
 	transfer.Source = tr.GetSource()
 	transfer.Destination = tr.GetDestination()
@@ -171,7 +171,9 @@ func (s *ConduitServer) StartTransfer(ctx context.Context, tr *proto.TransferReq
 		s.eMutex.RUnlock()
 	}
 
-	s.em.SubmitTransfer(transfer)
+	if err := s.em.SubmitTransfers([]*proto.TransferDetails{transfer}); err != nil {
+		return nil, fmt.Errorf("failed to submit transfer[%s]: %v", transfer.GetTransferID(), err)
+	}
 
 	return transfer, nil
 }
@@ -531,7 +533,7 @@ func (s *ConduitServer) WatchStatus(tids *proto.TransferIds, stream proto.Condui
 				}
 
 				it := proto.IncompleteTransfer(&proto.TransferDetails{TransferID: uid.String()})
-				resUser, err := s.em.GetTransferUser(it)
+				resUser, _, err := s.em.GetTransferUser(it)
 				if err != nil {
 					err = fmt.Errorf("failed to get user for tranfser[%v]: %v", rid, err)
 					s.log.Error(err)
@@ -769,7 +771,7 @@ func (s *ConduitServer) ValidateTransfer(ctx context.Context, tr *proto.Transfer
 
 	transfer := proto.NewTransferDetails()
 
-	transfer.State = proto.TransferState_TRANSFER_INIT
+	transfer.State = proto.TransferState_TRANSFER_INIT_COMPLETE
 	transfer.TransferID = transferID.String()
 	transfer.Source = tr.GetSource()
 	transfer.Destination = tr.GetDestination()
@@ -787,7 +789,9 @@ func (s *ConduitServer) ValidateTransfer(ctx context.Context, tr *proto.Transfer
 		transfer.Warnings = append(transfer.Warnings, fmt.Sprintf("%s (Validate Transfer)", adminWarning))
 	}
 
-	s.em.SubmitTransfer(transfer)
+	if err := s.em.SubmitTransfers([]*proto.TransferDetails{transfer}); err != nil {
+		return nil, fmt.Errorf("failed to submit transfer[%s]: %v", transfer.GetTransferID(), err)
+	}
 
 	return transfer, nil
 }
@@ -864,16 +868,21 @@ func (s *ConduitServer) SchedulerInfo(ctx context.Context, _ *emptypb.Empty) (*p
 
 	schedulers := make(map[string]*proto.SchedulerStatus)
 
-	for _, schduler := range s.sched {
+	for _, scheduler := range s.schdulers {
 		schedulerStatus := &proto.SchedulerStatus{
 			Nodes: make(map[string]*proto.NodeStatus),
 		}
 
-		nodes := schduler.GetNodeInfo()
+		queue := scheduler.GetQueue()
+		schedulerStatus.Queue = queue
+		schedulerStatus.QueueSize = int64(len(queue))
+
+		nodes := scheduler.GetNodeInfo()
 		for _, node := range nodes {
 			nodeStatus := &proto.NodeStatus{
 				Jobs:            make(map[string]*proto.JobInfo),
 				AvailableMemory: node.Memory,
+				JobsVersion:     node.LastJobsVersion,
 			}
 
 			for transferID, jobInfo := range node.Jobs {
@@ -882,7 +891,8 @@ func (s *ConduitServer) SchedulerInfo(ctx context.Context, _ *emptypb.Empty) (*p
 
 			schedulerStatus.Nodes[node.Name] = nodeStatus
 		}
-		schedulers[schduler.GetSchedulerID().String()] = schedulerStatus
+
+		schedulers[scheduler.GetSchedulerID().String()] = schedulerStatus
 	}
 
 	return &proto.SchedulerInfoResponse{Schedulers: schedulers}, nil

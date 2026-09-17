@@ -22,8 +22,10 @@ import (
 	"github.com/lanl/conduit/internal/fta/plugin"
 	"github.com/lanl/conduit/internal/logger"
 	"github.com/spf13/viper"
+	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -60,6 +62,15 @@ type ETCDManager struct {
 
 	eclients map[uuid.UUID]chan clientv3.WatchResponse
 	emutex   sync.RWMutex
+
+	expiries map[string]map[uuid.UUID]proto.IncompleteTransfer
+	exmutex  sync.RWMutex
+
+	// activeWaiters is a map specifically for anything waiting for transfers to be completed (for example a transfer worker acquiring a lease)
+	// key: transferID of the watched transfer
+	// 		key: waiterID    value: channel to accept completed transferIDs
+	activeWaiters map[uuid.UUID]map[uuid.UUID]chan uuid.UUID
+	awMutex       sync.Mutex
 }
 
 // NewETCDManager creates a new ETCDManager instance that can be used to interact with ETCD.
@@ -73,10 +84,12 @@ func NewETCDManager(log *logger.ConduitLogger, tlsCert *tls.Certificate, certPoo
 	}
 
 	em := &ETCDManager{
-		log:      l,
-		tclients: make(map[uuid.UUID]chan clientv3.WatchResponse),
-		lclients: make(map[uuid.UUID]chan clientv3.WatchResponse),
-		eclients: make(map[uuid.UUID]chan clientv3.WatchResponse),
+		log:           l,
+		tclients:      make(map[uuid.UUID]chan clientv3.WatchResponse),
+		lclients:      make(map[uuid.UUID]chan clientv3.WatchResponse),
+		eclients:      make(map[uuid.UUID]chan clientv3.WatchResponse),
+		expiries:      make(map[string]map[uuid.UUID]proto.IncompleteTransfer),
+		activeWaiters: make(map[uuid.UUID]map[uuid.UUID]chan uuid.UUID),
 	}
 
 	tlsConfig := &tls.Config{
@@ -162,7 +175,7 @@ func (em *ETCDManager) GetWatchChannelPrefix(key string, rev int64) (clientv3.Wa
 func (em *ETCDManager) GetWatchChannelRev(key string, rev int64) (clientv3.WatchChan, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 	em.cmutex.RLock()
-	lch := em.client.Watch(ctx, key, clientv3.WithRev(rev))
+	lch := em.client.Watch(ctx, key, clientv3.WithFromKey(), clientv3.WithRev(rev), clientv3.WithPrevKV())
 	em.cmutex.RUnlock()
 	return lch, cancel
 }
@@ -231,18 +244,30 @@ func (em *ETCDManager) Delete(key string) (*clientv3.DeleteResponse, error) {
 }
 
 // DeleteTransfer will delete all values for a transfer in etcd
-func (em *ETCDManager) DeleteTransfer(id uuid.UUID) (int64, error) {
+func (em *ETCDManager) DeleteTransfer(id uuid.UUID) (deleted int64, err error) {
 	prefix := proto.TransferPrefix + id.String()
 	resp, err := em.RetryDeletePrefix(prefix, defaults.MaxRetries, defaults.RetryDelay)
 
-	return resp.Deleted, err
+	if resp == nil {
+		deleted = 0
+	} else {
+		deleted = resp.Deleted
+	}
+
+	return deleted, err
 }
 
 // DeleteTransferLease will delete all lease values for a transfer in etcd
-func (em *ETCDManager) DeleteTransferLease(it proto.IncompleteTransfer) (int64, error) {
+func (em *ETCDManager) DeleteTransferLease(it proto.IncompleteTransfer) (deleted int64, err error) {
 	resp, err := em.RetryDeletePrefix(it.ETCDLeaseListKey(), defaults.MaxRetries, defaults.RetryDelay)
 
-	return resp.Deleted, err
+	if resp == nil {
+		deleted = 0
+	} else {
+		deleted = resp.Deleted
+	}
+
+	return deleted, err
 }
 
 // GetTransfer will get all values for a transfer
@@ -262,21 +287,21 @@ func (em *ETCDManager) GetTransfer(id uuid.UUID) (*proto.TransferDetails, proto.
 }
 
 // GetTransferUser will get the transfer's user from etcd
-func (em *ETCDManager) GetTransferUser(it proto.IncompleteTransfer) (string, error) {
+func (em *ETCDManager) GetTransferUser(it proto.IncompleteTransfer) (string, proto.Error, error) {
 	resp, err := em.RetryGet(it.ETCDUserKey(), defaults.MaxRetries, defaults.RetryDelay)
 	if err != nil {
-		return "", err
+		return "", proto.Error_ERROR_ETCD_CONNECTION, err
 	}
 
 	if len(resp.Kvs) < 1 {
-		return "", ErrNotFound
+		return "", proto.Error_ERROR_CONDUIT_INTERNAL, ErrNotFound
 	}
 
 	if string(resp.Kvs[0].Value) == "" {
-		return "", fmt.Errorf("etcd returned empty user")
+		return "", proto.Error_ERROR_CONDUIT_INTERNAL, fmt.Errorf("etcd returned empty user")
 	}
 
-	return string(resp.Kvs[0].Value), nil
+	return string(resp.Kvs[0].Value), proto.Error_ERROR_NONE, nil
 }
 
 // GetTransferUser will get the transfer's user from etcd
@@ -406,47 +431,35 @@ func (em *ETCDManager) GetCreatedTime(it proto.IncompleteTransfer) (*timestamppb
 	return timestamppb.New(createdTime), nil
 }
 
-// GetAllTransfers will get all transfers in etcd
-func (em *ETCDManager) GetAllTransfers(cRev int64) (map[string]*proto.TransferDetails, error) {
-	em.log.Debugf("Retrieving all existing transfers in etcd...")
-	if cRev == 0 {
-		em.log.Debugf("cannot use 0 as a prefix revision, using 1 instead")
-		cRev = 1
-	}
-	wc, cancel := em.GetWatchChannelPrefix(proto.TransferPrefix, cRev)
-	events := []*clientv3.Event{}
-watchChannelLoop:
-	for {
-		select {
-		case wresp := <-wc:
-			for _, e := range wresp.Events {
-				events = append(events, e)
-				// em.log.Debugf("%v %v", e.Kv.CreateRevision, e.Kv.ModRevision)
-				if e.Kv.ModRevision == wresp.Header.Revision {
-					em.log.Debugf("found the last key! %v %v %v", e.Kv.CreateRevision, e.Kv.ModRevision, string(e.Kv.Key))
-					break watchChannelLoop
-				}
-				if e.Kv.ModRevision > wresp.Header.Revision {
-					em.log.Debugf("found newer key! %v %v %v %v", e.Kv.CreateRevision, e.Kv.ModRevision, wresp.Header.Revision, string(e.Kv.Key))
-					break watchChannelLoop
-				}
-			}
-		case <-time.After(5 * time.Second):
-			em.log.Debugf("didn't get any transfers after 5 seconds, continuing...")
-			break watchChannelLoop
-		}
-	}
-	cancel()
+// GetAllTransfers will get all current transfers in etcd and return the revision that was used
+func (em *ETCDManager) GetAllTransfers() (transfers map[string]*proto.TransferDetails, rev int64, err error) {
+	transfers = make(map[string]*proto.TransferDetails)
+	transferKVs := make(map[uuid.UUID][]*mvccpb.KeyValue)
 
-	em.log.Debugf("found %v events in etcd", len(events))
-	em.log.Debugf("converting all etcd events into transfers...")
-
-	transfers, err := ParseETCDTransfers(events)
+	resp, err := em.GetPrefix(proto.TransferPrefix)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse etcd transfers: %v", err)
+		return transfers, -1, fmt.Errorf("failed to get all transfers from etcd: %v", err)
 	}
 
-	return transfers, nil
+	for _, kv := range resp.Kvs {
+		id, _, err := proto.ParseETCDTransfersKey(string(kv.Key))
+		if err != nil {
+			return transfers, resp.Header.GetRevision(), fmt.Errorf("failed to parse transfer key[%v]: %v", string(kv.Key), err)
+		}
+
+		transferKVs[id] = append(transferKVs[id], kv)
+	}
+
+	for id, kvs := range transferKVs {
+		t, err := ParseETCDTransfer(id, kvs, nil)
+		if err != nil {
+			return transfers, resp.Header.GetRevision(), fmt.Errorf("failed to parse etcd transfer: %v", err)
+		}
+
+		transfers[id.String()] = t
+	}
+
+	return transfers, resp.Header.GetRevision(), nil
 }
 
 func (em *ETCDManager) CompactRevision(rev int64) (curRev int64, err error) {
@@ -472,22 +485,53 @@ func (em *ETCDManager) CompactRevision(rev int64) (curRev int64, err error) {
 
 // CompleteTransfer DOES NOT require a full transferDetails object including all leases
 func (em *ETCDManager) CompleteTransfer(t proto.IncompleteTransfer) error {
+	newExpiry := timestamppb.New(
+		time.Now().Add(viper.GetDuration(defaults.ConfigExpiryAdvanceKey)),
+	)
+	endTime := timestamppb.Now()
 
-	var comparisons *[]clientv3.Cmp
-
-	actions := []clientv3.Op{}
-	actions = append(actions, clientv3.OpPut(t.ETCDActiveKey(), strconv.FormatBool(false)))
-	actions = append(actions, clientv3.OpPut(t.ETCDArchiveStateKey(), proto.ArchiveState_ARCHIVE_READY.String()))
-	actions = append(actions, clientv3.OpDelete(t.ETCDLeaseListKey(), clientv3.WithPrefix()))
-	actions = append(actions, clientv3.OpPut(t.ETCDEndTimeKey(), timestamppb.Now().AsTime().Format(time.RFC3339)))
-	actions = append(actions, clientv3.OpDelete(t.ETCDJobsKey(), clientv3.WithPrefix()))
-
-	resp, err := em.RetryTxn(comparisons, &actions, defaults.MaxRetries, defaults.RetryDelay)
-	if err != nil {
-		return fmt.Errorf("error while setting active key to false for transfer[%s]: %v", t.GetTransferID(), err)
+	comparisons := []clientv3.Cmp{
+		clientv3.Compare(clientv3.CreateRevision(t.ETCDActiveKey()), ">", 0),
 	}
+
+	actions := []clientv3.Op{
+		// Always mark the transfer inactive and clean up runtime state.
+		clientv3.OpPut(t.ETCDActiveKey(), strconv.FormatBool(false)),
+		clientv3.OpDelete(t.ETCDLeaseListKey(), clientv3.WithPrefix()),
+		clientv3.OpDelete(t.ETCDJobsKey(), clientv3.WithPrefix()),
+
+		// Only make the transfer ready for archival if nobody has already
+		// started changing the archive state.
+		clientv3.OpTxn(
+			[]clientv3.Cmp{
+				clientv3.Compare(clientv3.Value(t.ETCDArchiveStateKey()), "=", proto.ArchiveState_ARCHIVE_NONE.String()),
+			},
+			[]clientv3.Op{
+				clientv3.OpPut(t.ETCDArchiveStateKey(), proto.ArchiveState_ARCHIVE_READY.String()),
+				clientv3.OpPut(t.ETCDExpiryKey(), newExpiry.AsTime().Format(time.RFC3339)),
+			},
+			nil,
+		),
+
+		// Only set the end time once.
+		clientv3.OpTxn(
+			[]clientv3.Cmp{
+				clientv3.Compare(clientv3.Value(t.ETCDEndTimeKey()), "=", time.Unix(0, 0).UTC().Format(time.RFC3339)),
+			},
+			[]clientv3.Op{
+				clientv3.OpPut(t.ETCDEndTimeKey(), endTime.AsTime().Format(time.RFC3339)),
+			},
+			nil,
+		),
+	}
+
+	resp, err := em.RetryTxn(&comparisons, &actions, nil, defaults.MaxRetries, defaults.RetryDelay)
+	if err != nil {
+		return fmt.Errorf("error while completing transfer[%s]: %v", t.GetTransferID(), err)
+	}
+
 	if !resp.Succeeded {
-		return fmt.Errorf("failed to set active key to false for transfer[%s]: %v", t.GetTransferID(), resp.Responses)
+		return fmt.Errorf("failed to complete transfer[%s]: active key does not exist", t.GetTransferID())
 	}
 
 	return nil
@@ -513,10 +557,14 @@ func (em *ETCDManager) safelyAddErr(it proto.IncompleteTransfer, errorState prot
 	for i := 1; i <= defaults.MaxRetries; i++ {
 		txn, cancel := em.Txn()
 		txn.If(clientv3.Compare(clientv3.Value(errKey), "=", proto.Error_ERROR_NONE.String()))
+
 		actions := []clientv3.Op{}
 		actions = append(actions, clientv3.OpPut(errKey, errorState.String()))
 		actions = append(actions, clientv3.OpPut(errMessageKey, errorMessage.Error()))
 		txn.Then(actions...)
+
+		// If the comparison fails, return the current value of the error.
+		txn.Else(clientv3.OpGet(errKey))
 
 		resp, err := txn.Commit()
 		cancel()
@@ -539,6 +587,25 @@ func (em *ETCDManager) safelyAddErr(it proto.IncompleteTransfer, errorState prot
 			}
 		}
 		if !resp.Succeeded {
+			if len(resp.Responses) == 0 {
+				em.log.Errorf("comparison failed but etcd did not return the existing error for transfer[%s]", it.GetTransferID())
+				return false, proto.Error_ERROR_NONE, nil
+			}
+
+			getResp := resp.Responses[0].GetResponseRange()
+			if getResp == nil || len(getResp.Kvs) == 0 {
+				em.log.Errorf("comparison failed but error key did not exist for transfer[%s]", it.GetTransferID())
+				return false, proto.Error_ERROR_NONE, nil
+			}
+
+			existingError, ok := proto.Error_value[string(getResp.Kvs[0].Value)]
+			if !ok {
+				em.log.Errorf("comparison failed but existing error value[%s] was invalid for transfer[%s]", string(getResp.Kvs[0].Value), it.GetTransferID())
+				return false, proto.Error_ERROR_NONE, nil
+			}
+
+			em.log.Debugf("existing error: %s", existingError)
+
 			return false, proto.Error_ERROR_NONE, nil
 		}
 
@@ -603,95 +670,191 @@ func (em *ETCDManager) forceAddErr(it proto.IncompleteTransfer, errorState proto
 	return false, proto.Error_ERROR_CONDUIT_INTERNAL, fmt.Errorf("etcd was never contacted to safely set err state for transfer[%s]", it.GetTransferID())
 }
 
-// FailTransfer DOES NOT require a full transferDetails object including all leases
-func (em *ETCDManager) AbortTransfer(t *proto.TransferDetails, errorMessage error) error {
-	comparisons := []clientv3.Cmp{}
-	comparisons = append(comparisons, clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ERROR.String()))
-	comparisons = append(comparisons, clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ABORTED.String()))
-	comparisons = append(comparisons, clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ABORT.String()))
+// AbortTransfer requests that an active transfer be aborted.
+// The transfer worker is responsible for transitioning ABORT -> ABORTED
+// and performing any required cleanup.
+func (em *ETCDManager) AbortTransfer(t proto.IncompleteTransfer, errorMessage error) error {
+	comparisons := []clientv3.Cmp{
+		clientv3.Compare(clientv3.Value(t.ETCDActiveKey()), "=", strconv.FormatBool(true)),
+		clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ERROR.String()),
+		clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ABORTED.String()),
+		clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ABORT.String()),
+		clientv3.Compare(clientv3.Value(t.ETCDErrorKey()), "=", proto.Error_ERROR_NONE.String()),
+	}
 
-	actions := []clientv3.Op{}
-	actions = append(actions, clientv3.OpPut(t.ETCDStateKey(), proto.TransferState_TRANSFER_ABORT.String()))
-	actions = append(actions, clientv3.OpPut(t.ETCDErrorKey(), proto.Error_ERROR_ABORTED.String()))
-	actions = append(actions, clientv3.OpPut(t.ETCDErrorMessageKey(), errorMessage.Error()))
+	actions := []clientv3.Op{
+		clientv3.OpPut(t.ETCDStateKey(), proto.TransferState_TRANSFER_ABORT.String()),
+		clientv3.OpPut(t.ETCDErrorKey(), proto.Error_ERROR_ABORTED.String()),
+		clientv3.OpPut(t.ETCDErrorMessageKey(), errorMessage.Error()),
+		clientv3.OpDelete(t.ETCDJobsKey(), clientv3.WithPrefix()),
+	}
 
-	resp, err := em.RetryTxn(&comparisons, &actions, defaults.MaxRetries, defaults.RetryDelay)
+	// If the comparison fails, retrieve the current state atomically
+	// so we can distinguish an already-aborted transfer from one that
+	// can no longer be aborted.
+	elses := []clientv3.Op{
+		clientv3.OpGet(t.ETCDStateKey()),
+		clientv3.OpGet(t.ETCDActiveKey()),
+		clientv3.OpGet(t.ETCDErrorKey()),
+	}
+
+	resp, err := em.RetryTxn(&comparisons, &actions, &elses, defaults.MaxRetries, defaults.RetryDelay)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to abort transfer[%s]: %w", t.GetTransferID(), err)
 	}
+
+	if resp.Succeeded {
+		return nil
+	}
+
+	if len(resp.Responses) < 3 {
+		return fmt.Errorf("failed to abort transfer[%s]: etcd did not return the current transfer state", t.GetTransferID())
+	}
+
+	stateResp := resp.Responses[0].GetResponseRange()
+	activeResp := resp.Responses[1].GetResponseRange()
+	errorResp := resp.Responses[2].GetResponseRange()
+
+	if stateResp == nil || len(stateResp.Kvs) == 0 {
+		return fmt.Errorf("failed to abort transfer[%s]: transfer state does not exist", t.GetTransferID())
+	}
+
+	currentState := string(stateResp.Kvs[0].Value)
+
+	if activeResp == nil || len(activeResp.Kvs) == 0 {
+		return fmt.Errorf("failed to abort transfer[%s]: active state does not exist", t.GetTransferID())
+	}
+
+	active, err := strconv.ParseBool(string(activeResp.Kvs[0].Value))
+	if err != nil {
+		return fmt.Errorf("failed to parse active state for transfer[%s]: %w", t.GetTransferID(), err)
+	}
+
+	// An inactive transfer is already complete. Clean up any runtime state
+	// that may have been left behind.
+	if !active {
+		if err := em.cleanupInactiveTransfer(t); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	// ABORT/ABORTED while still active means the abort is already being
+	// processed. Do not interfere with the worker's cleanup.
+	switch currentState {
+	case proto.TransferState_TRANSFER_ABORT.String(), proto.TransferState_TRANSFER_ABORTED.String():
+		return nil
+	}
+
+	if errorResp == nil || len(errorResp.Kvs) == 0 {
+		return fmt.Errorf("failed to abort transfer[%s]: error state does not exist", t.GetTransferID())
+	}
+
+	currentError := string(errorResp.Kvs[0].Value)
+
+	if currentError != proto.Error_ERROR_NONE.String() {
+		return fmt.Errorf("failed to abort transfer[%s]: transfer already has error[%s]", t.GetTransferID(), currentError)
+	}
+
+	if currentState == proto.TransferState_TRANSFER_ERROR.String() {
+		return fmt.Errorf("failed to abort transfer[%s]: transfer is already in error state", t.GetTransferID())
+	}
+
+	return fmt.Errorf("failed to abort transfer[%s]: current state is %s", t.GetTransferID(), currentState)
+}
+
+func (em *ETCDManager) cleanupInactiveTransfer(t proto.IncompleteTransfer) error {
+	comparisons := []clientv3.Cmp{
+		clientv3.Compare(clientv3.Value(t.ETCDActiveKey()), "=", strconv.FormatBool(false)),
+	}
+
+	actions := []clientv3.Op{
+		clientv3.OpDelete(t.ETCDLeaseListKey(), clientv3.WithPrefix()),
+		clientv3.OpDelete(t.ETCDJobsKey(), clientv3.WithPrefix()),
+	}
+
+	resp, err := em.RetryTxn(&comparisons, &actions, nil, defaults.MaxRetries, defaults.RetryDelay)
+	if err != nil {
+		return fmt.Errorf("failed to clean runtime state for transfer[%s]: %w", t.GetTransferID(), err)
+	}
+
 	if !resp.Succeeded {
-		comparisons := []clientv3.Cmp{}
-
-		actions := []clientv3.Op{}
-		actions = append(actions, clientv3.OpPut(t.ETCDActiveKey(), strconv.FormatBool(false)))
-		actions = append(actions, clientv3.OpDelete(t.ETCDLeaseListKey(), clientv3.WithPrefix()))
-
-		resp, err := em.RetryTxn(&comparisons, &actions, defaults.MaxRetries, defaults.RetryDelay)
-		if err != nil {
-			em.log.Errorf("failed to remove lease from etcd for transfer[%s]: %v", t.GetTransferID(), err)
-		}
-		if !resp.Succeeded {
-			em.log.Errorf("failed to remove lease from etcd for transfer[%s]: it has recoverable paths", t.GetTransferID())
-		}
-
-		return fmt.Errorf("failed to set abort state for transfer[%s], has it already completed?: %v", t.GetTransferID(), resp.Responses)
+		return fmt.Errorf("transfer[%s] became active while attempting cleanup", t.GetTransferID())
 	}
+
 	return nil
 }
 
-// SubmitTransfer is the initial submission into ETCD
-func (em *ETCDManager) SubmitTransfer(t *proto.TransferDetails) {
-	ops, err := ConvertETCDTransfer(t)
-	if err != nil {
-		tErr := fmt.Errorf("transfer[%s]: failed to get ops for etcd: %v", t.GetTransferID(), err)
-		em.log.Error(tErr)
-		fErr := em.CompleteTransfer(t)
-		if fErr != nil {
-			em.log.Errorf("failed to fail transfer[%s]: %v", t.GetTransferID(), fErr)
-		}
-		return
+// SubmitTransfers is the initial submission into ETCD.
+func (em *ETCDManager) SubmitTransfers(transfers []*proto.TransferDetails) error {
+	type submitBatch struct {
+		ops       []clientv3.Op
+		transfers []proto.IncompleteTransfer
 	}
 
-	// split ops into chunks. ETCD has a limit of how many operations you can do per transfer. ETCD's default is 128
-	opsChunks := [][]clientv3.Op{}
-	for i := 0; i < len(ops); i += OpChunkSize {
-		end := i + OpChunkSize
-		if end > len(ops) {
-			end = len(ops)
+	batches := []submitBatch{}
+	currentBatch := submitBatch{}
+
+	for _, t := range transfers {
+		if t.GetState() != proto.TransferState_TRANSFER_INIT_COMPLETE {
+			return fmt.Errorf("transfer[%s] submitted with invalid initial state[%s]", t.GetTransferID(), t.GetState())
 		}
-		opsChunks = append(opsChunks, ops[i:end])
-	}
 
-	// set transfer state INIT_COMPLETE to trigger the transfer worker
-	// these need to be the last operations because anything after it might not get picked up by the transfer workers
-	fOp := clientv3.OpPut(t.ETCDStateKey(), proto.TransferState_TRANSFER_INIT_COMPLETE.String())
-
-	// add the final ops chunks to the end of the opschunks
-	opsChunks = append(opsChunks, []clientv3.Op{fOp})
-
-	// send the chunks to etcd
-	for ci, c := range opsChunks {
-		em.log.Debugf("transfer[%s]: sending chunk %v of %v", t.GetTransferID(), ci, len(opsChunks))
-
-		resp, err := em.RetryTxn(nil, &c, defaults.MaxRetries, defaults.RetryDelay)
+		ops, err := ConvertETCDTransfer(t)
 		if err != nil {
-			tErr := fmt.Errorf("transfer[%s]: error while submitting transfer: %v", t.GetTransferID(), err)
-			em.log.Error(tErr)
-			fErr := em.CompleteTransfer(t)
-			if fErr != nil {
-				em.log.Errorf("failed to fail transfer[%s]: %v", t.GetTransferID(), fErr)
-			}
-			return
+			return fmt.Errorf("transfer[%s]: failed to get ops for etcd: %v", t.GetTransferID(), err)
 		}
+
+		// A single transfer must never be split between transactions.
+		if len(ops) > OpChunkSize {
+			return fmt.Errorf("transfer[%s] requires %d etcd operations, exceeding OpChunkSize[%d]", t.GetTransferID(), len(ops), OpChunkSize)
+		}
+
+		// Adding this transfer would overflow the current batch.
+		// Save the current batch and start a new one.
+		if len(currentBatch.ops) > 0 && len(currentBatch.ops)+len(ops) > OpChunkSize {
+
+			batches = append(batches, currentBatch)
+			currentBatch = submitBatch{}
+		}
+
+		currentBatch.ops = append(currentBatch.ops, ops...)
+		currentBatch.transfers = append(currentBatch.transfers, t)
+	}
+
+	// Add the final partially-filled batch.
+	if len(currentBatch.ops) > 0 {
+		batches = append(batches, currentBatch)
+	}
+
+	// Send each batch to etcd.
+	for i, batch := range batches {
+		em.log.Debugf("sending transfer batch %d of %d containing %d transfers and %d operations", i+1, len(batches), len(batch.transfers), len(batch.ops))
+
+		comparisons := make([]clientv3.Cmp, 0, len(batch.transfers))
+		ids := make([]string, 0, len(batch.transfers))
+
+		for _, t := range batch.transfers {
+			ids = append(ids, t.GetTransferID())
+			comparisons = append(comparisons, clientv3.Compare(clientv3.CreateRevision(t.ETCDStateKey()), "=", 0))
+		}
+
+		resp, err := em.RetryTxn(&comparisons, &batch.ops, nil, defaults.MaxRetries, defaults.RetryDelay)
+		if err != nil {
+			return fmt.Errorf("error while submitting transfers[%v]: %v", ids, err)
+		}
+
+		if resp == nil {
+			return fmt.Errorf("response from etcd was nil while submitting transfers[%v]", ids)
+		}
+
 		if !resp.Succeeded {
-			tErr := fmt.Errorf("transfer[%s]: if condition failed to etcd transaction while submitting transfer to etcd", t.GetTransferID())
-			em.log.Error(tErr)
-			fErr := em.CompleteTransfer(t)
-			if fErr != nil {
-				em.log.Errorf("failed to fail transfer[%s]: %v", t.GetTransferID(), fErr)
-			}
+			return fmt.Errorf("etcd transaction failed while submitting transfers[%v]", ids)
 		}
 	}
+
+	return nil
 }
 
 // PauseTransfer sets the paused state value for a transfer in ETCD
@@ -720,17 +883,17 @@ func (em *ETCDManager) PauseTransfer(t *proto.TransferDetails, ps proto.Transfer
 }
 
 // SafelySetTransferState will attempt to set the transfer state safely by comparing the transfer state it should be coming from
-func (em *ETCDManager) SafelySetTransferState(t proto.IncompleteTransfer, fromState proto.TransferState, toState proto.TransferState) (bool, proto.Error, error) {
+func (em *ETCDManager) SafelySetTransferState(t proto.IncompleteTransfer, fromState proto.TransferState, toState proto.TransferState) (successful bool, protoErr proto.Error, err error) {
 	return em.safelySetState(t, fromState, toState, Transfer)
 }
 
 // SafelySetTransferArchiveState will attempt to set the transfer archive state safely by comparing the transfer archive state it should be coming from
-func (em *ETCDManager) SafelySetTransferArchiveState(t proto.IncompleteTransfer, fromState proto.ArchiveState, toState proto.ArchiveState) (bool, proto.Error, error) {
+func (em *ETCDManager) SafelySetTransferArchiveState(t proto.IncompleteTransfer, fromState proto.ArchiveState, toState proto.ArchiveState) (successful bool, protoErr proto.Error, err error) {
 	return em.safelySetState(t, fromState, toState, Archive)
 }
 
 // safelySetState will attempt to set a state safely by comparing the previous state it should be coming from
-func (em *ETCDManager) safelySetState(t proto.IncompleteTransfer, fromState proto.StringableState, toState proto.StringableState, stateType StateType) (bool, proto.Error, error) {
+func (em *ETCDManager) safelySetState(t proto.IncompleteTransfer, fromState proto.StringableState, toState proto.StringableState, stateType StateType) (successful bool, protoErr proto.Error, err error) {
 	key := ""
 	switch stateType {
 	case Transfer:
@@ -837,7 +1000,7 @@ func ParseCertFromBytes(pemBytes []byte) (*tls.Certificate, uuid.UUID, error) {
 }
 
 // RetryTxn will create a transaction and commit it a set number of times
-func (em *ETCDManager) RetryTxn(compare *[]clientv3.Cmp, actions *[]clientv3.Op, retryCount int, sleepDur time.Duration) (*clientv3.TxnResponse, error) {
+func (em *ETCDManager) RetryTxn(compare *[]clientv3.Cmp, actions *[]clientv3.Op, elses *[]clientv3.Op, retryCount int, sleepDur time.Duration) (*clientv3.TxnResponse, error) {
 	var resp *clientv3.TxnResponse
 	var err error
 
@@ -848,6 +1011,9 @@ func (em *ETCDManager) RetryTxn(compare *[]clientv3.Cmp, actions *[]clientv3.Op,
 		}
 		if actions != nil {
 			txn.Then(*actions...)
+		}
+		if elses != nil {
+			txn.Else(*elses...)
 		}
 
 		resp, err = txn.Commit()
@@ -921,25 +1087,6 @@ func (em *ETCDManager) RetryGetPrefixRev(prefix string, rev int64, retryCount in
 	return nil, fmt.Errorf("retried get prefix %v times. Giving up: %v", retryCount, err)
 }
 
-// RetryPut will try to put a set number of times
-func (em *ETCDManager) RetryPut(key, value string, retryCount int, sleepDur time.Duration) (*clientv3.PutResponse, error) {
-	var resp *clientv3.PutResponse
-	var err error
-
-	for i := 1; i <= retryCount; i++ {
-		resp, err = em.Put(key, value)
-		if err == nil {
-			return resp, nil
-		}
-		if i != retryCount {
-			time.Sleep(sleepDur)
-		}
-	}
-
-	em.log.Errorf("error putting[%v](%s) into etcd: %v", key, value, err)
-	return nil, fmt.Errorf("retried put %v times. Giving up: %v", retryCount, err)
-}
-
 func (em *ETCDManager) AddWarnings(it proto.IncompleteTransfer, newWarnings []string) error {
 	succeed := false
 	var err error
@@ -961,7 +1108,7 @@ func (em *ETCDManager) AddWarnings(it proto.IncompleteTransfer, newWarnings []st
 			comparisons := &[]clientv3.Cmp{clientv3.Compare(clientv3.Value(it.ETCDWarningsKey()), "=", string(oldWarningsJson))}
 			actions := &[]clientv3.Op{clientv3.OpPut(it.ETCDWarningsKey(), string(newWarningsJson))}
 
-			resp, err := em.RetryTxn(comparisons, actions, defaults.MaxRetries, defaults.RetryDelay)
+			resp, err := em.RetryTxn(comparisons, actions, nil, defaults.MaxRetries, defaults.RetryDelay)
 			if resp != nil {
 				succeed = resp.Succeeded
 			}
@@ -1024,23 +1171,49 @@ func (em *ETCDManager) GetOldestRev(prefix string) (int64, error) {
 	return resp.Kvs[0].CreateRevision, err
 }
 
-func (em *ETCDManager) GetOldestTransfersRev() (int64, error) {
+func (em *ETCDManager) GetOldestTransfersRev() (oldestKV *mvccpb.KeyValue, currentRev int64, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaults.DefaultETCDTimeout)
+	defer cancel()
+
+	opts := []clientv3.OpOption{
+		clientv3.WithPrefix(),
+		clientv3.WithLimit(1),
+		clientv3.WithSort(clientv3.SortByCreateRevision, clientv3.SortAscend),
+	}
+
 	em.cmutex.RLock()
-	// when keys are sorted Lexicographically, the jobs prefix will come after the errors prefix. We're trying to get the oldest revision that's not in the errors prefix
-	resp, err := em.client.Get(ctx, proto.JobsPrefix, clientv3.WithFromKey(), clientv3.WithLimit(1), clientv3.WithSort(clientv3.SortByCreateRevision, clientv3.SortAscend))
+	resp, err := em.client.Txn(ctx).Then(
+		clientv3.OpGet(proto.JobsPrefix, opts...),
+		clientv3.OpGet(proto.LeasePrefix, opts...),
+		clientv3.OpGet(proto.TransferPrefix, opts...),
+	).Commit()
 	em.cmutex.RUnlock()
-	cancel()
+
 	if err != nil {
-		return 0, err
+		return nil, 0, err
 	}
-	if len(resp.Kvs) < 1 {
-		// etcd is empty
-		// compact to the most recent revision
-		return resp.Header.GetRevision(), nil
+
+	currentRev = resp.Header.GetRevision()
+
+	for _, opResp := range resp.Responses {
+		rangeResp := opResp.GetResponseRange()
+		if rangeResp == nil || len(rangeResp.Kvs) == 0 {
+			continue
+		}
+
+		kv := rangeResp.Kvs[0]
+		if oldestKV == nil || kv.CreateRevision < oldestKV.CreateRevision {
+			oldestKV = kv
+		}
 	}
-	em.log.Debugf("got oldest transfer rev of %v for key: [%v] value: [%v]", resp.Kvs[0].CreateRevision, string(resp.Kvs[0].Key), string(resp.Kvs[0].Value))
-	return resp.Kvs[0].CreateRevision, err
+
+	if oldestKV == nil {
+		return nil, currentRev, nil
+	}
+
+	em.log.Debugf("got oldest conduit revision[%d] current[%d] key[%s]", oldestKV.CreateRevision, currentRev, string(oldestKV.Key))
+
+	return oldestKV, currentRev, nil
 }
 
 // GetDestInfo will get the transfer destination info from etcd
@@ -1065,23 +1238,61 @@ func (em *ETCDManager) GetDestInfo(it proto.IncompleteTransfer) (proto.DestInfo,
 }
 
 // GetLeases will get the transfer's leases from etcd
-func (em *ETCDManager) GetLeases(it proto.IncompleteTransfer) ([]string, error) {
+func (em *ETCDManager) GetTransferLeases(it proto.IncompleteTransfer) (*proto.Leases, proto.Error, error) {
 	resp, err := em.RetryGet(it.ETCDLeasesKey(), defaults.MaxRetries, defaults.RetryDelay)
 	if err != nil {
-		return []string{}, err
+		return nil, proto.Error_ERROR_ETCD_CONNECTION, err
 	}
 
 	if len(resp.Kvs) < 1 {
-		return []string{}, ErrNotFound
+		return nil, proto.Error_ERROR_CONDUIT_INTERNAL, ErrNotFound
 	}
 
-	leases := []string{}
-	err = json.Unmarshal(resp.Kvs[0].Value, &leases)
+	leases := &proto.Leases{}
+	err = protojson.Unmarshal(resp.Kvs[0].Value, leases)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal json: %v", err)
+		return nil, proto.Error_ERROR_CONDUIT_INTERNAL, fmt.Errorf("failed to unmarshal json: %v", err)
 	}
 
-	return leases, nil
+	return leases, proto.Error_ERROR_NONE, nil
+}
+
+// GetTransferValidationOnly will get the transfer's validationOnly value from etcd
+func (em *ETCDManager) GetTransferValidationOnly(it proto.IncompleteTransfer) (bool, proto.Error, error) {
+	resp, err := em.RetryGet(it.ETCDValidationOnlyKey(), defaults.MaxRetries, defaults.RetryDelay)
+	if err != nil {
+		return false, proto.Error_ERROR_ETCD_CONNECTION, err
+	}
+
+	if len(resp.Kvs) < 1 {
+		return false, proto.Error_ERROR_CONDUIT_INTERNAL, ErrNotFound
+	}
+
+	b, err := strconv.ParseBool(string(resp.Kvs[0].Value))
+	if err != nil {
+		return false, proto.Error_ERROR_CONDUIT_INTERNAL, fmt.Errorf("failed to parse validation only bool: %v", err)
+	}
+
+	return b, proto.Error_ERROR_NONE, nil
+}
+
+// GetTransferArchiveState will get the transfer's archive state value from etcd
+func (em *ETCDManager) GetTransferArchiveState(it proto.IncompleteTransfer) (proto.ArchiveState, proto.Error, error) {
+	resp, err := em.RetryGet(it.ETCDArchiveStateKey(), defaults.MaxRetries, defaults.RetryDelay)
+	if err != nil {
+		return proto.ArchiveState_ARCHIVE_NONE, proto.Error_ERROR_ETCD_CONNECTION, err
+	}
+
+	if len(resp.Kvs) < 1 {
+		return proto.ArchiveState_ARCHIVE_NONE, proto.Error_ERROR_CONDUIT_INTERNAL, ErrNotFound
+	}
+
+	state, ok := proto.ArchiveState_value[string(resp.Kvs[0].Value)]
+	if !ok {
+		return proto.ArchiveState_ARCHIVE_NONE, proto.Error_ERROR_CONDUIT_INTERNAL, fmt.Errorf("could not convert [%v] to archive state", string(resp.Kvs[0].Value))
+	}
+
+	return proto.ArchiveState(state), proto.Error_ERROR_NONE, nil
 }
 
 // GetSources will get the transfer's sources from etcd
@@ -1133,7 +1344,7 @@ func (em *ETCDManager) RollbackState(it proto.IncompleteTransfer, fromState, toS
 		clientv3.OpPut(it.ETCDExpiryKey(), time.Now().Add(viper.GetDuration(defaults.ConfigExpiryAdvanceKey)).Format(time.RFC3339)),
 	}
 
-	resp, err := em.RetryTxn(&comparisons, actions, defaults.MaxRetries, defaults.RetryDelay)
+	resp, err := em.RetryTxn(&comparisons, actions, nil, defaults.MaxRetries, defaults.RetryDelay)
 	if err != nil || !resp.Succeeded {
 		return fmt.Errorf("failed to rollback state to %s for transfer[%s]: %v", toState, it.GetTransferID(), err)
 	}
@@ -1198,7 +1409,7 @@ func (em *ETCDManager) GetActionAndOptions(it proto.IncompleteTransfer) (action 
 		clientv3.OpGet(it.ETCDOptionsKey()),
 	}
 
-	resp, err := em.RetryTxn(nil, &txnActions, defaults.MaxRetries, defaults.RetryDelay)
+	resp, err := em.RetryTxn(nil, &txnActions, nil, defaults.MaxRetries, defaults.RetryDelay)
 	if err != nil {
 		return "", nil, err
 	}
@@ -1241,7 +1452,7 @@ func (em *ETCDManager) GetSourcesAndDestination(it proto.IncompleteTransfer) (so
 		clientv3.OpGet(it.ETCDDestinationKey()),
 	}
 
-	resp, err := em.RetryTxn(nil, &txnActions, defaults.MaxRetries, defaults.RetryDelay)
+	resp, err := em.RetryTxn(nil, &txnActions, nil, defaults.MaxRetries, defaults.RetryDelay)
 	if err != nil {
 		return nil, "", err
 	}

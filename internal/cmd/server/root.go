@@ -17,7 +17,6 @@ import (
 var (
 	cfgFile         string
 	debug           bool
-	clearEtcd       bool
 	etcdIPs         []net.IP
 	etcdPorts       []int
 	etcdHostnames   []string
@@ -45,7 +44,7 @@ var (
 				logrus.Errorf("failed to create conduit server: %v", err)
 				os.Exit(1)
 			}
-			err = s.StartConduitServer(clearEtcd)
+			err = s.StartConduitServer()
 			if err != nil {
 				logrus.Errorf("conduit exiting with err: %v", err)
 				os.Exit(1)
@@ -66,8 +65,6 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(func() { initConfig(cfgFile) })
-
-	RootCmd.Flags().BoolVar(&clearEtcd, "clear-etcd", false, "This will completely clear out all conduit related entries in ETCD when conduit starts")
 
 	// global flags
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", fmt.Sprintf("config file (default is %s%s.%s)", DefaultConfigLocation, ConfigName, ConfigType))

@@ -142,7 +142,6 @@ services:
       - ./config_files/conduit-server-config.yaml:/etc/conduit/conduit-server-config.yaml:ro
     command:
       - -d
-      # - --clear-etcd
     stop_grace_period: 3m
     environment:
       # GRPC_GO_LOG_SEVERITY_LEVEL: info
