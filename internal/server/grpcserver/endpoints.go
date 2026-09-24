@@ -5,9 +5,7 @@ package grpcserver
 import (
 	"context"
 	"fmt"
-	"maps"
 	"runtime/debug"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -375,8 +373,6 @@ func (s *ConduitServer) Query(ctx context.Context, qo *proto.QueryOptions) (*pro
 	s.log.Debugf("get transfers for user [%v]", user)
 
 	s.tMutex.RLock()
-
-	s.log.Debugf("current cache: %v", slices.Collect(maps.Keys(s.transfers)))
 
 	transfers := make(map[string]*proto.TransferDetails)
 
