@@ -5,7 +5,9 @@ package grpcserver
 import (
 	"context"
 	"fmt"
+	"maps"
 	"runtime/debug"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -373,12 +375,19 @@ func (s *ConduitServer) Query(ctx context.Context, qo *proto.QueryOptions) (*pro
 	s.log.Debugf("get transfers for user [%v]", user)
 
 	s.tMutex.RLock()
-	defer s.tMutex.RUnlock()
+
+	s.log.Debugf("current cache: %v", slices.Collect(maps.Keys(s.transfers)))
+
 	transfers := make(map[string]*proto.TransferDetails)
 
 	// if user is a privileged account, assume they want all transfers in conduit
 	if (reqPrivLevel == privilegedAdmin || reqPrivLevel == privilegedService) && user == "" {
-		transfers = s.transfers
+		for id, td := range s.transfers {
+			transfers[id] = td
+		}
+
+		s.tMutex.RUnlock()
+
 		rTransfers, err := s.rm.GetTransfersByUser(nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transfers from rqlite: %v", err)
@@ -394,6 +403,8 @@ func (s *ConduitServer) Query(ctx context.Context, qo *proto.QueryOptions) (*pro
 				transfers[id.String()] = s.transfers[id.String()]
 			}
 		}
+
+		s.tMutex.RUnlock()
 
 		rTransfers, err := s.rm.GetTransfersByUser(&user)
 		if err != nil {
