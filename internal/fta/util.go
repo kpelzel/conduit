@@ -352,7 +352,7 @@ func removeDuplicates[T comparable](sliceList []T) []T {
 	return list
 }
 
-func globSource(transferID uuid.UUID, log *logger.ConduitLogger, source string, fscs map[string]*plugin.FileSystemConfig) ([]string, *plugin.FTAPathError) {
+func globSource(transferID uuid.UUID, log *logger.ConduitLogger, source string, fscs map[string]*plugin.FileSystemConfig) ([]string, *proto.FTAPathError) {
 	// No glob characters, nothing to do.
 	if !strings.ContainsAny(source, globChars) {
 		return []string{source}, nil
@@ -379,10 +379,10 @@ func globSource(transferID uuid.UUID, log *logger.ConduitLogger, source string, 
 	// Get the portion containing the glob.
 	relativePattern, err := filepath.Rel(globRoot, source)
 	if err != nil {
-		return []string{source}, &plugin.FTAPathError{
+		return []string{source}, &proto.FTAPathError{
 			LeasePath:  source,
 			PErr:       proto.Error_ERROR_INVALID_INPUT,
-			ErrMessage: fmt.Errorf("failed to get relative glob path for source[%v]: %v", source, err),
+			ErrMessage: fmt.Sprintf("failed to get relative glob path for source[%v]: %v", source, err),
 		}
 	}
 
@@ -391,10 +391,10 @@ func globSource(transferID uuid.UUID, log *logger.ConduitLogger, source string, 
 
 	matches, err := filepath.Glob(ftaPattern)
 	if err != nil {
-		return []string{source}, &plugin.FTAPathError{
+		return []string{source}, &proto.FTAPathError{
 			LeasePath:  source,
 			PErr:       proto.Error_ERROR_INVALID_INPUT,
-			ErrMessage: fmt.Errorf("failed to glob source[%v]: %v", source, err),
+			ErrMessage: fmt.Sprintf("failed to glob source[%v]: %v", source, err),
 		}
 	}
 
@@ -408,10 +408,10 @@ func globSource(transferID uuid.UUID, log *logger.ConduitLogger, source string, 
 	for _, match := range matches {
 		relativeMatch, err := filepath.Rel(rootPlugin.ResolvedFTAPath, match)
 		if err != nil {
-			return []string{source}, &plugin.FTAPathError{
+			return []string{source}, &proto.FTAPathError{
 				LeasePath:  source,
 				PErr:       proto.Error_ERROR_INVALID_INPUT,
-				ErrMessage: fmt.Errorf("failed to get relative matched path[%v]: %v", match, err),
+				ErrMessage: fmt.Sprintf("failed to get relative matched path[%v]: %v", match, err),
 			}
 		}
 
