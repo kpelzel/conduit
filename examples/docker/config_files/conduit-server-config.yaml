@@ -39,12 +39,12 @@ node-allocations:
     nodes: 1
     memory: 10MB
 nodes:
-  fta1:
+  fta1.example.com:
     address: fta1.example.com
     port: 9000
     min-memory: 1GB
     max-jobs: 4
-  fta2:
+  fta2.example.com:
     address: 192.168.20.7
     port: 9000
     min-memory: 1GB

@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/lanl/conduit/defaults"
 	"github.com/spf13/viper"
 )
 
@@ -28,16 +29,16 @@ type RViperConfig struct {
 }
 
 func GetRqliteEndpointsFromViper() ([]string, error) {
+	var configs []*RViperConfig
+
+	if err := viper.UnmarshalKey(defaults.ConfigRqliteKey, &configs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal rqlite config: %w", err)
+	}
+
 	var rqliteEndpoints []string
 
-	rc := &RqliteViperConfig{}
-	err := viper.Unmarshal(rc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal rqlite config: %v", err)
-	}
-	for _, r := range rc.Rqlite {
+	for _, r := range configs {
 		ip := net.ParseIP(r.IP)
-
 		addr := net.JoinHostPort(ip.String(), strconv.Itoa(r.Port))
 		rqliteEndpoints = append(rqliteEndpoints, addr)
 	}

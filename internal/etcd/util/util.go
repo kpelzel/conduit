@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/lanl/conduit/defaults"
 	"github.com/spf13/viper"
 )
 
@@ -19,16 +20,20 @@ type EViperConfig struct {
 }
 
 func GetEtcdEndpointsFromViper() ([]string, error) {
+	var configs []*EViperConfig
+
+	if err := viper.UnmarshalKey(defaults.ConfigETCDKey, &configs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal etcd config: %w", err)
+	}
+
 	var etcdEndpoints []string
 
-	ec := &EtcdViperConfig{}
-	err := viper.Unmarshal(ec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal etcd config: %v", err)
-	}
-	for _, e := range ec.Etcd {
+	for _, e := range configs {
 		ip := net.ParseIP(e.IP)
-		etcdEndpoints = append(etcdEndpoints, fmt.Sprintf("%s:%d", ip.String(), e.Port))
+		etcdEndpoints = append(
+			etcdEndpoints,
+			fmt.Sprintf("%s:%d", ip.String(), e.Port),
+		)
 	}
 
 	return etcdEndpoints, nil
