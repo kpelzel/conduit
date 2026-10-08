@@ -170,6 +170,22 @@ func (h *HTTPServer) StartHTTPServer(authMode string, certPool *x509.CertPool, s
 		MinVersion:   tls.VersionTLS12,
 	}
 
+	certFile := viper.GetString(defaults.ConfigServerHTTPTLSCertKey)
+	keyFile := viper.GetString(defaults.ConfigServerHTTPTLSKeyKey)
+
+	if certFile != "" || keyFile != "" {
+		if certFile == "" || keyFile == "" {
+			return fmt.Errorf("both TLS certificate and key must be configured")
+		}
+
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return fmt.Errorf("failed to load HTTP TLS certificate: %w", err)
+		}
+
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
 	// Configure client certificate requirements based on auth mode
 	switch authMode {
 	case "mtls":
