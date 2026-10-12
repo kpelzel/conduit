@@ -4,7 +4,6 @@ package rsync
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -306,21 +305,4 @@ func (p *RsyncPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginDa
 	}
 
 	return pluginErrors
-}
-
-func ScanLinesWithCR(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	if atEOF && len(data) == 0 {
-		return 0, nil, nil
-	}
-	// Look for either \n or \r
-	if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
-		// Return the line up to the found character
-		return i + 1, data[0:i], nil
-	}
-	// If at EOF, return the rest of the data
-	if atEOF {
-		return len(data), data, nil
-	}
-	// Request more data
-	return 0, nil, nil
 }

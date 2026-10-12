@@ -13,11 +13,13 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	proto "github.com/lanl/conduit/api"
 	"github.com/lanl/conduit/internal/fta/actions"
 	"github.com/lanl/conduit/internal/fta/plugin"
+	"github.com/lanl/conduit/internal/fta/plugins/rsync"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -148,17 +150,18 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 	p.log.Debugf("user: %+v %v", currUser, err)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, fmt.Sprintf("HOME=%s", currUser.HomeDir))
+	cmd.Env = append(cmd.Env, "PYTHONUNBUFFERED=1")
 
 	done := make(chan *proto.FTAPathError)
 	fileChunksChan := make(chan uint32, 10)
 
 	stdoutScanner := bufio.NewScanner(stdoutp)
-	stdoutScanner.Split(bufio.ScanLines)
+	stdoutScanner.Split(rsync.ScanLinesWithCR)
 	stderrScanner := bufio.NewScanner(stderrp)
 	stderrScanner.Split(bufio.ScanLines)
 
-	stderrText := ""
-	stdoutText := ""
+	var stderrText strings.Builder
+	var stdoutText strings.Builder
 	nonfatalErrors := ""
 	detectedNoMovePath := ""
 
@@ -212,7 +215,8 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 		for stderrScanner.Scan() {
 			t := stderrScanner.Text()
 			p.log.Errorf("command error text: %v", t)
-			stderrText = fmt.Sprintf("%v\n%v", stderrText, strings.ToValidUTF8(t, "[invalid-utf8]"))
+			stderrText.WriteString(strings.ToValidUTF8(t, "[invalid-utf8]"))
+			stderrText.WriteByte('\n')
 		}
 
 		if err := stderrScanner.Err(); err != nil {
@@ -225,7 +229,12 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 		defer wg.Done()
 		for stdoutScanner.Scan() {
 			t := stdoutScanner.Text()
-			stdoutText = fmt.Sprintf("%v\n%v", stdoutText, strings.ToValidUTF8(t, "[invalid-utf8]"))
+
+			if p.log.GetLevel() == logrus.DebugLevel {
+				stdoutText.WriteString(strings.ToValidUTF8(t, "[invalid-utf8]"))
+				stdoutText.WriteByte('\n')
+			}
+
 			_, after, found := strings.Cut(strings.ToValidUTF8(t, "[invalid-utf8]"), ConduitPrefix)
 			// only react to messages with the conduit prefix
 			if found {
@@ -407,18 +416,26 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 	}
 
 	if errorOccurred.ErrMessage != "" {
-		// an error occurred. Format the cmd line in case there are a lot of sources
-		cmdOuput := cmd.String()
-		if len(cmd.String()) > 5000 {
-			cmdOuput = cmd.String()[:2500] + " ...... " + cmd.String()[len(cmd.String())-2500:]
-		}
-		errMessage := fmt.Sprintf("an error occurred during command[%v]: %+v\n\npftool stderr output:\n%v", cmdOuput, errorOccurred.ErrMessage, stderrText)
+		const maxOutputBytes = 32 * 1024
+		const maxErrorMessageBytes = 128 * 1024
+
+		cmdOutput := truncateMiddle(cmd.String(), 5000)
+		stderrOutput := truncateMiddle(stderrText.String(), maxOutputBytes)
+
+		errMessage := fmt.Sprintf("an error occurred during command[%v]: %+v\n\npftool stderr output:\n%v", cmdOutput, errorOccurred.ErrMessage, stderrOutput)
+
 		if p.log.GetLevel() == logrus.DebugLevel {
-			errMessage = fmt.Sprintf("an error occurred during command[%v]: %+v\n\ncmd environment: [%+v]\n\npftool stderr output:\n%v\n\npftool stdout output:\n%v", cmdOuput, errorOccurred.ErrMessage, cmd.Environ(), stderrText, stdoutText)
+			stdoutOutput := truncateMiddle(stdoutText.String(), maxOutputBytes)
+
+			errMessage = fmt.Sprintf("an error occurred during command[%v]: %+v\n\ncmd environment: [%+v]\n\npftool stderr output:\n%v\n\npftool stdout output:\n%v", cmdOutput, errorOccurred.ErrMessage, cmd.Environ(), stderrOutput, stdoutOutput)
 		}
+
 		if nonfatalErrors != "" {
-			errMessage = fmt.Sprintf("%s\n\npftool nonfatal errors:\n%s", errMessage, nonfatalErrors)
+			errMessage = fmt.Sprintf("%s\n\npftool nonfatal errors:\n%s", errMessage, truncateMiddle(nonfatalErrors, maxOutputBytes))
 		}
+
+		// Final safeguard before storing the error in etcd.
+		errMessage = truncateMiddle(errMessage, maxErrorMessageBytes)
 
 		pluginErrors.Errors = append(pluginErrors.Errors, &proto.FTAPathError{
 			PErr:       errorOccurred.PErr,
@@ -431,4 +448,35 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 	}
 
 	return pluginErrors
+}
+
+// truncateMiddle limits a string to maxBytes while preserving
+// the beginning and end and replacing the middle with a marker.
+func truncateMiddle(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+
+	const marker = "\n... [output truncated] ...\n"
+
+	if maxBytes <= 0 {
+		return ""
+	}
+	if maxBytes <= len(marker) {
+		return marker[:maxBytes]
+	}
+
+	remaining := maxBytes - len(marker)
+	head := remaining / 2
+	tail := len(s) - (remaining - head)
+
+	// Avoid splitting UTF-8 characters.
+	for head > 0 && !utf8.RuneStart(s[head]) {
+		head--
+	}
+	for tail < len(s) && !utf8.RuneStart(s[tail]) {
+		tail++
+	}
+
+	return s[:head] + marker + s[tail:]
 }

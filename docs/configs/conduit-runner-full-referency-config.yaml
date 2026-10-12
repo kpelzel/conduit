@@ -11,8 +11,8 @@ etcd:
 fta:
   # define any extra environment variables that will be sent to the environment that runs conduit-fta
   environment:
-    LD_LIBRARY_PATH: /lib/:/lib64/:/usr/local/lib
-    PATH: /bin:/usr/bin/:/usr/local/bin/
+    - "PATH=/bin:/usr/bin/:/usr/local/bin/"
+    - "LD_LIBRARY_PATH=/lib/:/lib64/:/usr/local/lib"
   # define any flags for conduit-fta
   options:
     - "-d"

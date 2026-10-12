@@ -245,10 +245,10 @@ func (r *Runner) RunConduitFTA(id uuid.UUID, req *proto.JobRequest) {
 	cmd.Env = append(cmd.Environ(), fmt.Sprintf("%s=%s", defaults.FTASocketEnvVar, socketPath))
 
 	// set extra config defined environment variables
-	cmdEnvMap := viper.GetStringMapString(defaults.ConfigFTAEnvKey)
-	for k, v := range cmdEnvMap {
-		cmd.Env = append(cmd.Environ(), fmt.Sprintf("%s=%s", k, v))
-	}
+	cmd.Env = append(
+		cmd.Environ(),
+		viper.GetStringSlice(defaults.ConfigFTAEnvKey)...,
+	)
 
 	outBuffer := new(bytes.Buffer)
 	errBuffer := new(bytes.Buffer)

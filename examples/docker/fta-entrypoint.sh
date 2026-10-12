@@ -1,12 +1,15 @@
 #!/bin/bash
 
-THREADS=$(grep -c ^processor /proc/cpuinfo)
-sed -i "s/pfls: 15/pfls: $THREADS/" /etc/pftool/etc/pftool.cfg
-sed -i "s/pfcp: 15/pfcp: $THREADS/" /etc/pftool/etc/pftool.cfg
-sed -i "s/pfcm: 15/pfcm: $THREADS/" /etc/pftool/etc/pftool.cfg
+THREADS=$(nproc)
+PFCP_THREADS=$((THREADS > 2 ? THREADS - 2 : 1))
 
+sed -i -E \
+    -e "s/^(pfls:[[:space:]]*)[0-9]+/\1${PFCP_THREADS}/" \
+    -e "s/^(pfcp:[[:space:]]*)[0-9]+/\1${PFCP_THREADS}/" \
+    -e "s/^(pfcm:[[:space:]]*)[0-9]+/\1${PFCP_THREADS}/" \
+    /etc/pftool/etc/pftool.cfg
 
-rm /run/nologin
+rm -f /run/nologin
 /usr/sbin/sshd -t
 /usr/sbin/sshd
 

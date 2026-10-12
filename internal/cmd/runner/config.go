@@ -43,9 +43,9 @@ var (
 	DefaultFTAOptions             = []string{""}
 	DefaultHostname               = []string{"conduitrunner.example.com"}
 
-	DefaultEnvironment = map[string]string{
-		"PATH":            "/bin:/usr/bin/:/usr/local/bin/",
-		"LD_LIBRARY_PATH": "/lib/:/lib64/:/usr/local/lib",
+	DefaultEnvironment = []string{
+		"PATH=/bin:/usr/bin/:/usr/local/bin/",
+		"LD_LIBRARY_PATH=/lib/:/lib64/:/usr/local/lib",
 	}
 )
 

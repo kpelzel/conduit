@@ -14,4 +14,6 @@ RUN git clone https://github.com/pftool/pftool.git /pftool \
 RUN cp /etc/pftool/etc/example-pftool.cfg /etc/pftool/etc/pftool.cfg \
     && sed -i 's/mpirun: mpirun/mpirun: \/usr\/lib64\/openmpi\/bin\/mpirun/' /etc/pftool/etc/pftool.cfg \
     && sed -i 's/min_per_node: 2/min_per_node: 4/' /etc/pftool/etc/pftool.cfg \
-    && sed -i 's/localhost: ON/#localhost:ON\nfta1: ON\nfta2: ON/' /etc/pftool/etc/pftool.cfg
+    && sed -i 's/localhost: ON/#localhost:ON\nfta1: ON\nfta2: ON/' /etc/pftool/etc/pftool.cfg \
+    && sed -i 's/chunk_at: 10GB/chunk_at: 10MB/' /etc/pftool/etc/pftool.cfg \
+    && sed -i 's/chunksize: 10GB/chunksize: 10MB/' /etc/pftool/etc/pftool.cfg
