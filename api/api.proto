@@ -309,6 +309,7 @@ message NodeStatus {
     map<string, JobInfo> jobs = 1;
     uint64 availableMemory = 2;
     uint64 jobsVersion = 3;
+    string runnerVersion = 4;
 }
 
 message JobRequest {

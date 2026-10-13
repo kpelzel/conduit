@@ -13,13 +13,15 @@ This installation document will guide you through installing conduit and it's de
 
 1. Clone the repository
 2. Build the binaries
-3. Add conduit to /usr/local/bin
+3. Add Conduit to `/usr/local/bin`
 
 ```bash
 git clone https://github.com/lanl/conduit
 cd conduit
+
 # build server
 go build -o conduit-server ./cmd/server
+
 # build cli
 go build -o conduit ./cmd/cli
 
@@ -28,9 +30,24 @@ go build -o conduit-fta ./cmd/fta
 
 # build runner
 go build -o conduit-runner ./cmd/runner
+
 # add symlink to /usr/local/bin
 ln -s $(pwd)/conduit /usr/local/bin/conduit
 ```
+
+#### Optional Version Information
+
+A release version can optionally be embedded into each binary using the Go linker flag `-ldflags`. For example:
+
+```bash
+go build \
+    -ldflags="-X github.com/lanl/conduit/internal/version.Version=v2.0.4" \
+    -o conduit-server ./cmd/server
+```
+
+Replace `v2.0.4` with the desired version and apply the same flag when building the other Conduit binaries.
+
+If the flag is omitted, Conduit will still attempt to report the Git commit hash when available. When both are available, the version output includes the release version and commit hash.
 
 ## Cert Generation
 

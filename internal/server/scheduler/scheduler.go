@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"maps"
 	"net"
 	"sort"
 	"strconv"
@@ -71,6 +70,7 @@ type NodeInfo struct {
 	LastJobsVersion uint64
 	Memory          uint64                       // current available memory(MB) on the node
 	Name            string                       // name of node
+	RunnerVersion   string                       // version of the runner
 	client          proto.ConduitRunnerApiClient // API client that allows for streams for status updates
 }
 
@@ -85,6 +85,7 @@ func (n *NodeInfo) Clone() *NodeInfo {
 		LastJobsVersion: n.LastJobsVersion,
 		Memory:          n.Memory,
 		Name:            n.Name,
+		RunnerVersion:   n.RunnerVersion,
 		client:          n.client,
 	}
 }
@@ -759,6 +760,7 @@ func (s *Scheduler) connectToNode(ni *NodeInfo, nodeName string) (wasConnected b
 
 			// Memory is independent of JobsVersion and should always use the most recent node status message.
 			node.Memory = res.GetAvailableMemory()
+			node.RunnerVersion = res.GetRunnerVersion()
 
 			s.nodeInfoLock.Unlock()
 
@@ -838,7 +840,12 @@ func (s *Scheduler) GetNodeInfo() map[string]*NodeInfo {
 	s.nodeInfoLock.RLock()
 	defer s.nodeInfoLock.RUnlock()
 
-	return maps.Clone(s.nodeInfo)
+	nodes := make(map[string]*NodeInfo, len(s.nodeInfo))
+	for name, node := range s.nodeInfo {
+		nodes[name] = node.Clone()
+	}
+
+	return nodes
 }
 
 // GetQueue returns a snapshot of the scheduler queue in priority order.
