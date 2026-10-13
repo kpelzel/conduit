@@ -5,13 +5,13 @@ package grpcserver
 import (
 	"context"
 	"fmt"
-	"runtime/debug"
 	"time"
 
 	"github.com/google/uuid"
 	proto "github.com/lanl/conduit/api"
 	"github.com/lanl/conduit/defaults"
 	"github.com/lanl/conduit/internal/fta/actions"
+	"github.com/lanl/conduit/internal/version"
 	"github.com/spf13/viper"
 	goproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -435,27 +435,29 @@ func (s *ConduitServer) Query(ctx context.Context, qo *proto.QueryOptions) (*pro
 
 // StartTransfer is the initial handle of all StartTransfer requests from the gRPC API
 func (s *ConduitServer) Version(ctx context.Context, _ *emptypb.Empty) (*proto.VersionInfo, error) {
+	build := version.Current()
+
 	vi := &proto.VersionInfo{
-		Version:  "",
-		Modified: false,
+		Version:  build.String(),
+		Modified: build.Modified,
 	}
-	if info, ok := debug.ReadBuildInfo(); ok {
-		for _, setting := range info.Settings {
-			if setting.Key == "vcs.revision" {
-				vi.Version = setting.Value
-			}
-			if setting.Key == "vcs.modified" {
-				if setting.Value == "true" {
-					vi.Modified = true
-				}
-			}
-			if setting.Key == "vcs.time" {
-				vi.Time = setting.Value
-			}
-		}
-	} else {
-		return nil, fmt.Errorf("failed to get build info")
-	}
+	// if info, ok := debug.ReadBuildInfo(); ok {
+	// 	for _, setting := range info.Settings {
+	// 		if setting.Key == "vcs.revision" {
+	// 			vi.Version = setting.Value
+	// 		}
+	// 		if setting.Key == "vcs.modified" {
+	// 			if setting.Value == "true" {
+	// 				vi.Modified = true
+	// 			}
+	// 		}
+	// 		if setting.Key == "vcs.time" {
+	// 			vi.Time = setting.Value
+	// 		}
+	// 	}
+	// } else {
+	// 	return nil, fmt.Errorf("failed to get build info")
+	// }
 
 	return vi, nil
 }

@@ -13,6 +13,8 @@ LABEL maintainer="Kevin Pelzel <kpelzel@lanl.gov>"
 ARG TARGETARCH
 ARG TARGETOS
 
+ARG CONDUIT_VERSION=dev
+
 ARG GOARCH="${TARGETARCH}"
 ARG GOOS="${TARGETOS}"
 WORKDIR "/conduit"
@@ -35,7 +37,9 @@ RUN go vet -vettool $(which nilness) ./... \
 
 # build conduit-cli
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    go build -o conduit ./cmd/cli \
+    go build \
+      -ldflags="-X github.com/lanl/conduit/internal/version.Version=${CONDUIT_VERSION}" \
+      -o conduit ./cmd/cli \
     && cp -v conduit /sbin/conduit
 
 ENTRYPOINT [ "/sbin/conduit" ]

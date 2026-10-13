@@ -13,6 +13,8 @@ LABEL maintainer="Kevin Pelzel <kpelzel@lanl.gov>"
 ARG TARGETARCH
 ARG TARGETOS
 
+ARG CONDUIT_VERSION=dev
+
 ARG GOARCH="${TARGETARCH}"
 ARG GOOS="${TARGETOS}"
 WORKDIR "/conduit"
@@ -35,7 +37,9 @@ RUN go vet -vettool $(which nilness) ./... \
 
 # build conduit-fta
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    go build -o conduit-fta ./cmd/fta \
+    go build \
+      -ldflags="-X github.com/lanl/conduit/internal/version.Version=${CONDUIT_VERSION}" \
+      -o conduit-fta ./cmd/fta \
     && cp -v conduit-fta /sbin/conduit-fta
 
 ENTRYPOINT [ "/sbin/conduit-fta" ]
