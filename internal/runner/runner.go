@@ -30,6 +30,8 @@ import (
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+
+	"github.com/lanl/conduit/internal/version"
 )
 
 var _ proto.ConduitRunnerApiServer = (*Runner)(nil)
@@ -62,6 +64,7 @@ type Runner struct {
 	Shutdown    bool         // shutdown is used to signal that we are trying to shutdown so prevent the api endpoints from responding
 	rsMutex     sync.RWMutex // lock for runner state
 
+	Version string
 }
 
 // StreamInfo contains information regarding the channel streams
@@ -87,6 +90,8 @@ func NewRunner(log *logger.ConduitLogger, cert *pki.InternalCertManager, em *etc
 
 		runnerState: proto.ServerState_SERVER_STARTING,
 		Shutdown:    false,
+
+		Version: version.Current().String(),
 	}
 
 	return run
@@ -431,6 +436,7 @@ func (r *Runner) UpdateStreams() {
 			Jobs:            currentJobs,
 			AvailableMemory: r.AvailableMemory,
 			JobsVersion:     r.JobsVersion,
+			RunnerVersion:   r.Version,
 		}
 
 		r.StreamsLock.Lock()

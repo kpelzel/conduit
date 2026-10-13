@@ -892,6 +892,7 @@ func (s *ConduitServer) SchedulerInfo(ctx context.Context, _ *emptypb.Empty) (*p
 				Jobs:            make(map[string]*proto.JobInfo),
 				AvailableMemory: node.Memory,
 				JobsVersion:     node.LastJobsVersion,
+				RunnerVersion:   node.RunnerVersion,
 			}
 
 			for transferID, jobInfo := range node.Jobs {
