@@ -441,23 +441,6 @@ func (s *ConduitServer) Version(ctx context.Context, _ *emptypb.Empty) (*proto.V
 		Version:  build.String(),
 		Modified: build.Modified,
 	}
-	// if info, ok := debug.ReadBuildInfo(); ok {
-	// 	for _, setting := range info.Settings {
-	// 		if setting.Key == "vcs.revision" {
-	// 			vi.Version = setting.Value
-	// 		}
-	// 		if setting.Key == "vcs.modified" {
-	// 			if setting.Value == "true" {
-	// 				vi.Modified = true
-	// 			}
-	// 		}
-	// 		if setting.Key == "vcs.time" {
-	// 			vi.Time = setting.Value
-	// 		}
-	// 	}
-	// } else {
-	// 	return nil, fmt.Errorf("failed to get build info")
-	// }
 
 	return vi, nil
 }

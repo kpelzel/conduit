@@ -21,30 +21,7 @@ var versionCmd = &cobra.Command{
 	Short: "print cli version and conduit server version",
 	Long:  `print cli version and conduit server version`,
 	Run: func(cmd *cobra.Command, args []string) {
-
-		// build := version.Current()
-
-		// version := ""
-		// modified := false
 		fmt.Printf("conduit-cli version: %s\n", version.Current())
-		// if info, ok := rDebug.ReadBuildInfo(); ok {
-		// 	for _, setting := range info.Settings {
-		// 		if setting.Key == "vcs.revision" {
-		// 			version = setting.Value
-		// 		}
-		// 		if setting.Key == "vcs.modified" {
-		// 			if setting.Value == "true" {
-		// 				modified = true
-		// 			}
-		// 		}
-		// 	}
-		// }
-
-		// if modified {
-		// 	version += " (modified)"
-		// }
-
-		// fmt.Printf("conduit-cli version: %s\n", version)
 
 		logger := logrus.New()
 		if debug {
@@ -75,9 +52,7 @@ var versionCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		cv := cvi.GetVersion()
-		// if cvi.GetModified() {
-		// 	cv += " (modified)"
-		// }
+
 		fmt.Printf("conduit-server version: %s\n", cv)
 	},
 }
