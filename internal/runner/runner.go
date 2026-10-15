@@ -361,7 +361,11 @@ func (r *Runner) ETCDWatcher(cmd proto.SchedulerCommand, tid string) {
 			}
 
 			// when the job has been completed delete it from the jobs info map
-			if completedState == proto.TransferState(s) || proto.TransferState_TRANSFER_ERROR == proto.TransferState(s) || proto.TransferState_TRANSFER_ABORT == proto.TransferState(s) || proto.TransferState_TRANSFER_ABORTED == proto.TransferState(s) {
+			if completedState == proto.TransferState(s) ||
+				proto.TransferState_TRANSFER_ERROR == proto.TransferState(s) ||
+				proto.TransferState_TRANSFER_ABORT == proto.TransferState(s) ||
+				proto.TransferState_TRANSFER_ABORTED == proto.TransferState(s) ||
+				proto.TransferState_TRANSFER_PARTIALLY_COMPLETE == proto.TransferState(s) {
 
 				r.JobsInfoLock.Lock()
 

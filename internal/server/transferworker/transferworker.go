@@ -315,7 +315,10 @@ func (tw *TransferWorker) handleTransferEvents(evs []*clientv3.Event) {
 					continue
 
 				default:
-					go tw.handleTransferError(t, eventID)
+					// this will be ERROR_NONE if the key doesn't exist
+					transferErr := proto.Error(proto.Error_value[string(ev.Kv.Value)])
+
+					go tw.handleTransferError(t, transferErr, eventID)
 					continue
 				}
 			case t.ETCDStateKey():

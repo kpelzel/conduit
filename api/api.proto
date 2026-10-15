@@ -180,6 +180,7 @@ enum TransferState {
     TRANSFER_ERROR = 1;                 // check error status
     TRANSFER_ABORT = 2;                 // abort requested / abort cleanup in progress
     TRANSFER_ABORTED = 3;               // abort cleanup finished; terminal state
+    TRANSFER_PARTIALLY_COMPLETE = 4;   // alternative error state that signals when some files were transferred and some failed
 
     TRANSFER_INIT = 10;
     TRANSFER_INIT_COMPLETE = 11;         // set by conduit
@@ -221,37 +222,38 @@ enum TransferArchiveState {
 }
 
 enum Error {
-    ERROR_NONE = 0;                     // No errors during transfer
-    ERROR_PERMISSIONS = 1;              // File permissions are invalid
-    ERROR_NETWORK = 2;                  // NOT USED
-    ERROR_AUTH = 3;                     // Kerberos authentication failed
-    ERROR_PFTOOL_FAILED = 4;            // Transfer failed during the pftool transfer
-    ERROR_LEASE_EXPIRED = 5;            // Watchdog detected that validation, setup, transfer, or teardown has become unresponsive
-    ERROR_ETCD_CONNECTION = 6;          // Failed to connect to etcd
-    ERROR_ETCD_INTERNAL = 7;            // Failed to add a user to etcd
-    ERROR_SCHEDULER = 8;                // the scheduler responded with an error
-    ERROR_SCHEDULER_CONNECTION = 9;     // An Error occurred while trying to connect to the scheduler
-    ERROR_SCHEDULER_AUTH = 10;          // NOT USED
-    ERROR_CONDUIT_INTERNAL = 11;        // Catch-all error for conduit server operations. Send error message to developers
-    ERROR_NO_TRANSFERS_FOR_USER = 12;   // No Transfers found for user
-    ERROR_RENAME_FAILED = 13;           // FTA rename failed
-    ERROR_SYMLINK_FAILED = 14;          // FTA symlink creation failed
-    ERROR_MOUNTINFO_FAILED = 15;        // Error occurred while determining the correct filesystem for a path
-    ERROR_MKDIR_FAILED = 16;            // FTA mkdir failed 
+    ERROR_NONE = 0;                         // No errors during transfer
+    ERROR_PERMISSIONS = 1;                  // File permissions are invalid
+    ERROR_NETWORK = 2;                      // NOT USED
+    ERROR_AUTH = 3;                         // Kerberos authentication failed
+    ERROR_TRANSFER_FAILED = 4;              // The transfer plugin failed (ie pftool or rsync)
+    ERROR_LEASE_EXPIRED = 5;                // Watchdog detected that validation, setup, transfer, or teardown has become unresponsive
+    ERROR_ETCD_CONNECTION = 6;              // Failed to connect to etcd
+    ERROR_ETCD_INTERNAL = 7;                // Failed to add a user to etcd
+    ERROR_SCHEDULER = 8;                    // the scheduler responded with an error
+    ERROR_SCHEDULER_CONNECTION = 9;         // An Error occurred while trying to connect to the scheduler
+    ERROR_SCHEDULER_AUTH = 10;              // NOT USED
+    ERROR_CONDUIT_INTERNAL = 11;            // Catch-all error for conduit server operations. Send error message to developers
+    ERROR_NO_TRANSFERS_FOR_USER = 12;       // No Transfers found for user
+    ERROR_RENAME_FAILED = 13;               // FTA rename failed
+    ERROR_SYMLINK_FAILED = 14;              // FTA symlink creation failed
+    ERROR_MOUNTINFO_FAILED = 15;            // Error occurred while determining the correct filesystem for a path
+    ERROR_MKDIR_FAILED = 16;                // FTA mkdir failed 
     ERROR_LEASE_ERROR = 17;
-    ERROR_ABORTED = 18;                 // Transfer was aborted by user
-    ERROR_REMOVE_FAILED = 19;           // FTA remove failed
-    ERROR_STAT_FAILED = 20;             // FTA failed to stat a file
-    ERROR_CLEANUP_ERROR = 21;           // NOT USED 
-    ERROR_VALIDATION = 22;              // Error occurred while validating paths of a transfer
-    ERROR_DATA_CHANGED = 23;            // The data changed between stages
+    ERROR_ABORTED = 18;                     // Transfer was aborted by user
+    ERROR_REMOVE_FAILED = 19;               // FTA remove failed
+    ERROR_STAT_FAILED = 20;                 // FTA failed to stat a file
+    ERROR_CLEANUP_ERROR = 21;               // NOT USED 
+    ERROR_VALIDATION = 22;                  // Error occurred while validating paths of a transfer
+    ERROR_DATA_CHANGED = 23;                // The data changed between stages
     ERROR_FILE_NOT_EXIST = 24;
     ERROR_INVALID_REGEX = 25;
     ERROR_INVALID_CONDUIT_CONFIG = 26;
     ERROR_INVALID_INPUT = 27;
-    ERROR_MAX_ARG_STRLEN = 28;          // Max number of arguments hit. used for cli
+    ERROR_MAX_ARG_STRLEN = 28;              // Max number of arguments hit. used for cli
     ERROR_FTA_PLUGIN_FAILED = 29;
-    ERROR_CHTIME_FAILED = 30;           // FTA trash change modified time failed
+    ERROR_CHTIME_FAILED = 30;               // FTA trash change modified time failed
+    ERROR_TRANSFER_PARTIALLY_FAILED = 31;   // The transfer plugin failed but some sources did successfully transfer
 }
 
 enum ArchiveState {

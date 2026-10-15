@@ -114,7 +114,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 		return &proto.FTAPluginErrors{
 			Errors: []*proto.FTAPathError{
 				{
-					PErr:       proto.Error_ERROR_PFTOOL_FAILED,
+					PErr:       proto.Error_ERROR_TRANSFER_FAILED,
 					ErrMessage: fmt.Sprintf("failed to get stdout pipe from command: %v", err),
 				},
 			},
@@ -127,7 +127,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 		return &proto.FTAPluginErrors{
 			Errors: []*proto.FTAPathError{
 				{
-					PErr:       proto.Error_ERROR_PFTOOL_FAILED,
+					PErr:       proto.Error_ERROR_TRANSFER_FAILED,
 					ErrMessage: fmt.Sprintf("failed to get stderr pipe from command: %v", err),
 				},
 			},
@@ -163,6 +163,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 	var stderrText strings.Builder
 	var stdoutText strings.Builder
 	nonfatalErrors := ""
+	nonFatalErrCounter := 0
 	detectedNoMovePath := ""
 
 	p.log.Infof("pfcp command: %v", cmd.Args)
@@ -242,7 +243,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 				b := []byte(strings.TrimSpace(after))
 				pmt, err := getPFToolMessageType(b)
 				if err != nil {
-					done <- &proto.FTAPathError{PErr: proto.Error_ERROR_PFTOOL_FAILED, ErrMessage: fmt.Sprintf("failed to parse pftool message type: %v", err)}
+					done <- &proto.FTAPathError{PErr: proto.Error_ERROR_TRANSFER_FAILED, ErrMessage: fmt.Sprintf("failed to parse pftool message type: %v", err)}
 					return
 				}
 
@@ -259,6 +260,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 						nfErr := fmt.Sprintf("pftool nonfatal error message: class: %v errno: %v message: %v origin: %v", pm.Class, pm.Errno, pm.Message, pm.Origin)
 						p.log.Error(nfErr)
 						nonfatalErrors = fmt.Sprintf("%v\n%v", nonfatalErrors, nfErr)
+						nonFatalErrCounter++
 					} else {
 						fErr = fmt.Sprintf("pftool error message: class: %v errno: %v message: %v origin: %v", pm.Class, pm.Errno, pm.Message, pm.Origin)
 						break
@@ -318,7 +320,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 				}
 
 				if fErr != "" {
-					done <- &proto.FTAPathError{PErr: proto.Error_ERROR_PFTOOL_FAILED, ErrMessage: fErr}
+					done <- &proto.FTAPathError{PErr: proto.Error_ERROR_TRANSFER_FAILED, ErrMessage: fErr}
 					return
 				}
 			} else {
@@ -336,7 +338,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 		return &proto.FTAPluginErrors{
 			Errors: []*proto.FTAPathError{
 				{
-					PErr:       proto.Error_ERROR_PFTOOL_FAILED,
+					PErr:       proto.Error_ERROR_TRANSFER_FAILED,
 					ErrMessage: fmt.Sprintf("failed to start pftool command: %v", err),
 				},
 			},
@@ -351,7 +353,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 		err := cmd.Wait()
 		if err != nil {
 			done <- &proto.FTAPathError{
-				PErr:       proto.Error_ERROR_PFTOOL_FAILED,
+				PErr:       proto.Error_ERROR_TRANSFER_FAILED,
 				ErrMessage: fmt.Sprintf("pftool returned non zero exit code: %v %v", err, context.Cause(cmdContext)),
 			}
 			return
@@ -359,7 +361,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 
 		if stderrScanErr != nil {
 			done <- &proto.FTAPathError{
-				PErr:       proto.Error_ERROR_PFTOOL_FAILED,
+				PErr:       proto.Error_ERROR_TRANSFER_FAILED,
 				ErrMessage: stderrScanErr.Error(),
 			}
 			return
@@ -367,7 +369,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 
 		if stdoutScanErr != nil {
 			done <- &proto.FTAPathError{
-				PErr:       proto.Error_ERROR_PFTOOL_FAILED,
+				PErr:       proto.Error_ERROR_TRANSFER_FAILED,
 				ErrMessage: stdoutScanErr.Error(),
 			}
 			return
@@ -431,6 +433,9 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 		}
 
 		if nonfatalErrors != "" {
+			if nonFatalErrCounter < len(src) && nonFatalErrCounter > 0 {
+				errorOccurred.PErr = proto.Error_ERROR_TRANSFER_PARTIALLY_FAILED
+			}
 			errMessage = fmt.Sprintf("%s\n\npftool nonfatal errors:\n%s", errMessage, truncateMiddle(nonfatalErrors, maxOutputBytes))
 		}
 

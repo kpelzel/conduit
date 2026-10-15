@@ -684,6 +684,7 @@ func (em *ETCDManager) AbortTransfer(t proto.IncompleteTransfer, errorMessage er
 		clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ERROR.String()),
 		clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ABORTED.String()),
 		clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ABORT.String()),
+		clientv3.Compare(clientv3.Value(t.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_PARTIALLY_COMPLETE.String()),
 		clientv3.Compare(clientv3.Value(t.ETCDErrorKey()), "=", proto.Error_ERROR_NONE.String()),
 	}
 
@@ -762,7 +763,7 @@ func (em *ETCDManager) AbortTransfer(t proto.IncompleteTransfer, errorMessage er
 		return fmt.Errorf("failed to abort transfer[%s]: transfer already has error[%s]", t.GetTransferID(), currentError)
 	}
 
-	if currentState == proto.TransferState_TRANSFER_ERROR.String() {
+	if currentState == proto.TransferState_TRANSFER_ERROR.String() || currentState == proto.TransferState_TRANSFER_PARTIALLY_COMPLETE.String() {
 		return fmt.Errorf("failed to abort transfer[%s]: transfer is already in error state", t.GetTransferID())
 	}
 

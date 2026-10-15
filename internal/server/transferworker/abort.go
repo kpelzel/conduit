@@ -124,7 +124,7 @@ func (tw *TransferWorker) handleTransferAbort(it proto.IncompleteTransfer, event
 		tw.log.Debugf("transfer[%s] was already aborted", it.GetTransferID())
 		return
 
-	case proto.TransferState_TRANSFER_ERROR.String():
+	case proto.TransferState_TRANSFER_ERROR.String(), proto.TransferState_TRANSFER_PARTIALLY_COMPLETE.String():
 		tw.log.Debugf("transfer[%s] entered error state while processing abort", it.GetTransferID())
 		return
 	}

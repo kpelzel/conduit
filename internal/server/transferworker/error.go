@@ -13,7 +13,7 @@ import (
 )
 
 // handleLeaseError sets the transfer status to error and cancels all other scheduler jobs for this transfer
-func (tw *TransferWorker) handleTransferError(it proto.IncompleteTransfer, eventID uuid.UUID) {
+func (tw *TransferWorker) handleTransferError(it proto.IncompleteTransfer, transferError proto.Error, eventID uuid.UUID) {
 	defer tw.removeJob(eventID)
 
 	tid, err := uuid.Parse(it.GetTransferID())
@@ -26,12 +26,18 @@ func (tw *TransferWorker) handleTransferError(it proto.IncompleteTransfer, event
 		clientv3.Compare(clientv3.Value(it.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ERROR.String()),
 		clientv3.Compare(clientv3.Value(it.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ABORT.String()),
 		clientv3.Compare(clientv3.Value(it.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_ABORTED.String()),
+		clientv3.Compare(clientv3.Value(it.ETCDStateKey()), "!=", proto.TransferState_TRANSFER_PARTIALLY_COMPLETE.String()),
 		clientv3.Compare(clientv3.Value(it.ETCDActiveKey()), "=", strconv.FormatBool(true)),
 	}
 
 	actions := []clientv3.Op{
-		clientv3.OpPut(it.ETCDStateKey(), proto.TransferState_TRANSFER_ERROR.String()),
 		clientv3.OpDelete(it.ETCDJobsKey(), clientv3.WithPrefix()),
+	}
+
+	if transferError == proto.Error_ERROR_TRANSFER_PARTIALLY_FAILED {
+		actions = append(actions, clientv3.OpPut(it.ETCDStateKey(), proto.TransferState_TRANSFER_PARTIALLY_COMPLETE.String()))
+	} else {
+		actions = append(actions, clientv3.OpPut(it.ETCDStateKey(), proto.TransferState_TRANSFER_ERROR.String()))
 	}
 
 	elses := []clientv3.Op{
@@ -67,7 +73,7 @@ func (tw *TransferWorker) handleTransferError(it proto.IncompleteTransfer, event
 		}
 
 		switch string(stateResp.Kvs[0].Value) {
-		case proto.TransferState_TRANSFER_ERROR.String():
+		case proto.TransferState_TRANSFER_ERROR.String(), proto.TransferState_TRANSFER_PARTIALLY_COMPLETE.String():
 			// Another worker already changed the state.
 			// Continue with cleanup.
 

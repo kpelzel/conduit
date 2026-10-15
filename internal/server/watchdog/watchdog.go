@@ -240,7 +240,7 @@ func (w *Watchdog) handleWatchEvents(evs []*clientv3.Event) {
 				fallthrough
 			case it.ETCDStateKey():
 				switch value {
-				case proto.TransferState_TRANSFER_ERROR.String():
+				case proto.TransferState_TRANSFER_ERROR.String(), proto.TransferState_TRANSFER_PARTIALLY_COMPLETE.String():
 					fallthrough
 				case proto.TransferState_TRANSFER_FINALIZED.String():
 					// Terminal transfers are no longer the watchdog's
@@ -443,7 +443,9 @@ monitorLoop:
 
 						// The state watch normally handles this, but this protects against
 						// races where the monitor has already woken up when finalization occurs.
-						if t.GetState() == proto.TransferState_TRANSFER_FINALIZED || t.GetState() == proto.TransferState_TRANSFER_ERROR {
+						if t.GetState() == proto.TransferState_TRANSFER_FINALIZED ||
+							t.GetState() == proto.TransferState_TRANSFER_ERROR ||
+							t.GetState() == proto.TransferState_TRANSFER_PARTIALLY_COMPLETE {
 							break monitorLoop
 						}
 
@@ -512,6 +514,7 @@ func (w *Watchdog) expireTransfer(it proto.IncompleteTransfer, expiry time.Time)
 	compares := []clientv3.Cmp{
 		clientv3.Compare(clientv3.Value(stateKey), "!=", proto.TransferState_TRANSFER_FINALIZED.String()),
 		clientv3.Compare(clientv3.Value(stateKey), "!=", proto.TransferState_TRANSFER_ERROR.String()),
+		clientv3.Compare(clientv3.Value(stateKey), "!=", proto.TransferState_TRANSFER_PARTIALLY_COMPLETE.String()),
 		clientv3.Compare(clientv3.Value(errorKey), "=", proto.Error_ERROR_NONE.String()),
 		clientv3.Compare(clientv3.Value(expiryKey), "=", expiry.Format(time.RFC3339)),
 		clientv3.Compare(clientv3.CreateRevision(jobKey), "=", 0),
@@ -582,7 +585,8 @@ func (w *Watchdog) expireTransfer(it proto.IncompleteTransfer, expiry time.Time)
 	// attempting to expire it.
 	if transferErr != proto.Error_ERROR_NONE.String() ||
 		state == proto.TransferState_TRANSFER_FINALIZED.String() ||
-		state == proto.TransferState_TRANSFER_ERROR.String() {
+		state == proto.TransferState_TRANSFER_ERROR.String() ||
+		state == proto.TransferState_TRANSFER_PARTIALLY_COMPLETE.String() {
 
 		if err := w.removeTransferFromSchedulers(it); err != nil {
 			w.log.Errorf("failed to remove transfer[%v] from schedulers: %v", it.GetTransferID(), err)
