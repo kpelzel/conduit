@@ -432,6 +432,7 @@ func (p *PftoolPlugin) Transfer(transferID uuid.UUID, pluginData *plugin.PluginD
 			errMessage = fmt.Sprintf("an error occurred during command[%v]: %+v\n\ncmd environment: [%+v]\n\npftool stderr output:\n%v\n\npftool stdout output:\n%v", cmdOutput, errorOccurred.ErrMessage, cmd.Environ(), stderrOutput, stdoutOutput)
 		}
 
+		// set it to partially failed if we have errors than the number of sources (but more than zero)
 		if nonfatalErrors != "" {
 			if nonFatalErrCounter < len(src) && nonFatalErrCounter > 0 {
 				errorOccurred.PErr = proto.Error_ERROR_TRANSFER_PARTIALLY_FAILED

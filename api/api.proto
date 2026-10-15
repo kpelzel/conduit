@@ -180,18 +180,18 @@ enum TransferState {
     TRANSFER_ERROR = 1;                 // check error status
     TRANSFER_ABORT = 2;                 // abort requested / abort cleanup in progress
     TRANSFER_ABORTED = 3;               // abort cleanup finished; terminal state
-    TRANSFER_PARTIALLY_COMPLETE = 4;   // alternative error state that signals when some files were transferred and some failed
+    TRANSFER_PARTIALLY_COMPLETE = 4;    // alternative error state that signals when some files were transferred and some failed
 
     TRANSFER_INIT = 10;
-    TRANSFER_INIT_COMPLETE = 11;         // set by conduit
+    TRANSFER_INIT_COMPLETE = 11;        // set by conduit
 
-    TRANSFER_VALIDATION_READY = 12;      // set by conduit
-    TRANSFER_VALIDATION_SUBMITTED = 13;  // set by conduit
-    TRANSFER_VALIDATING = 14;            // set by fta
-    TRANSFER_VALIDATION_COMPLETE = 15;   // set by fta
+    TRANSFER_VALIDATION_READY = 12;     // set by conduit
+    TRANSFER_VALIDATION_SUBMITTED = 13; // set by conduit
+    TRANSFER_VALIDATING = 14;           // set by fta
+    TRANSFER_VALIDATION_COMPLETE = 15;  // set by fta
 
-    TRANSFER_WAITING_FOR_LEASE = 16;     // set by conduit
-    TRANSFER_LEASE_ACQUIRED = 17;        // set by conduit
+    TRANSFER_WAITING_FOR_LEASE = 16;    // set by conduit
+    TRANSFER_LEASE_ACQUIRED = 17;       // set by conduit
 
     TRANSFER_SETUP_READY = 18;          // set by conduit
     TRANSFER_SETUP_SUBMITTED = 19;      // set by conduit
@@ -226,7 +226,7 @@ enum Error {
     ERROR_PERMISSIONS = 1;                  // File permissions are invalid
     ERROR_NETWORK = 2;                      // NOT USED
     ERROR_AUTH = 3;                         // Kerberos authentication failed
-    ERROR_TRANSFER_FAILED = 4;              // The transfer plugin failed (ie pftool or rsync)
+    ERROR_PFTOOL_FAILED = 4;                // Transfer failed during the pftool transfer
     ERROR_LEASE_EXPIRED = 5;                // Watchdog detected that validation, setup, transfer, or teardown has become unresponsive
     ERROR_ETCD_CONNECTION = 6;              // Failed to connect to etcd
     ERROR_ETCD_INTERNAL = 7;                // Failed to add a user to etcd
@@ -253,7 +253,8 @@ enum Error {
     ERROR_MAX_ARG_STRLEN = 28;              // Max number of arguments hit. used for cli
     ERROR_FTA_PLUGIN_FAILED = 29;
     ERROR_CHTIME_FAILED = 30;               // FTA trash change modified time failed
-    ERROR_TRANSFER_PARTIALLY_FAILED = 31;   // The transfer plugin failed but some sources did successfully transfer
+    ERROR_TRANSFER_FAILED = 31;             // The transfer plugin failed (ie pftool or rsync)
+    ERROR_TRANSFER_PARTIALLY_FAILED = 32;   // The transfer plugin failed but some sources did successfully transfer
 }
 
 enum ArchiveState {
