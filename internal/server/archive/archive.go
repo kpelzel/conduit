@@ -267,6 +267,8 @@ func (a *Archiver) compactLoop(ctx context.Context) {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
+	lastCompact := time.Now()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -274,34 +276,43 @@ func (a *Archiver) compactLoop(ctx context.Context) {
 			return
 
 		case <-ticker.C:
+			// Compact if 2 hours have passed, even without a wakeup.
+			shouldCompact := time.Since(lastCompact) >= 2*time.Hour
+
 			select {
 			case <-a.compactWake:
-				// do compaction
-				err := a.compactETCD()
-				if err != nil {
-					if err.Error() == etcd.ErrRevCompacted {
-						a.log.Warnf("failed to compact etcd: %v", err)
-					} else {
-						a.log.Errorf("failed to compact etcd: %v", err)
-					}
-				}
+				shouldCompact = true
 			default:
-				// no compaction requested, wait till the next tick
+			}
+
+			if !shouldCompact {
+				continue
+			}
+
+			lastCompact = time.Now()
+
+			if err := a.compactETCD(); err != nil {
+				if err.Error() == etcd.ErrRevCompacted {
+					a.log.Warnf("failed to compact etcd: %v", err)
+				} else {
+					a.log.Errorf("failed to compact etcd: %v", err)
+				}
 			}
 		}
 	}
 }
 
 func (a *Archiver) compactETCD() error {
-	oldestKV, currRev, err := a.em.GetOldestTransfersRev()
+	oldestKV, getCurrRev, err := a.em.GetOldestTransfersRev()
 	if err != nil {
 		return fmt.Errorf("failed to get oldest revision from etcd: %v", err)
 	}
 
 	// If there are no live Conduit keys, everything through the current
 	// revision is safe to compact.
-	targetRev := currRev
+	targetRev := getCurrRev
 	targetKey := "<none>"
+	finalCurrRev := getCurrRev
 
 	if oldestKV != nil {
 		targetRev = oldestKV.CreateRevision
@@ -312,9 +323,9 @@ func (a *Archiver) compactETCD() error {
 		return nil
 	}
 
-	newCurrRev, err := a.em.CompactRevision(targetRev)
-	if newCurrRev != -1 {
-		currRev = newCurrRev
+	compactCurrRev, err := a.em.CompactRevision(targetRev)
+	if compactCurrRev != -1 {
+		finalCurrRev = compactCurrRev
 	}
 
 	if err != nil {
@@ -324,10 +335,11 @@ func (a *Archiver) compactETCD() error {
 			return nil
 		}
 
-		return fmt.Errorf("failed to compact to safe revision[%v] current[%v] key[%v]: %v", targetRev, currRev, targetKey, err)
+		return fmt.Errorf("failed to compact to safe revision[%v] current[%v] key[%v]: %v", targetRev, finalCurrRev, targetKey, err)
 	}
 
-	a.log.Infof("successfully compacted etcd to revision: %v. current revision: %v", targetRev, currRev)
+	a.log.Infof("successfully compacted etcd to revision: %v. current revision: %v", targetRev, finalCurrRev)
+	a.log.Debugf("compaction info: target=%d compactRev=%d getRev=%d", targetRev, compactCurrRev, getCurrRev)
 
 	return nil
 }
